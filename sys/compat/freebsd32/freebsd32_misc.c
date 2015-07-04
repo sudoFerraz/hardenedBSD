@@ -2858,9 +2858,9 @@ freebsd32_copyout_strings(struct image_params *imgp)
 		execpath_len = strlen(imgp->execpath) + 1;
 	else
 		execpath_len = 0;
-	arginfo = (struct freebsd32_ps_strings *)curproc->p_sysent->
-	    sv_psstrings;
-	if (imgp->proc->p_sysent->sv_sigcode_base == 0)
+	arginfo = (struct freebsd32_ps_strings *)curproc->p_psstrings;
+	imgp->proc->p_sigcode_base = imgp->proc->p_sigcode_base;
+	if (imgp->proc->p_sigcode_base == 0)
 		szsigcode = *(imgp->proc->p_sysent->sv_szsigcode);
 	else
 		szsigcode = 0;
