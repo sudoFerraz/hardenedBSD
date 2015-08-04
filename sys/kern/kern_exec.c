@@ -1051,7 +1051,7 @@ exec_new_vmspace(imgp, sv)
 	vm_offset_t sv_minuser, stack_addr;
 	vm_map_t map;
 	u_long ssiz;
-#if __ia64__
+#ifdef __ia64__
 	vm_offset_t ia64backingstore_addr;
 #endif
 
