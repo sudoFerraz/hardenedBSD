@@ -262,8 +262,6 @@ elf_linux_fixup(register_t **stack_base, struct image_params *imgp)
 	args = (Elf32_Auxargs *)imgp->auxargs;
 	pos = base + (imgp->args->argc + imgp->args->envc + 2);
 
-	AUXARGS_ENTRY_32(pos, LINUX_AT_SYSINFO_EHDR,
-	    imgp->proc->p_shared_page_base);
 	AUXARGS_ENTRY_32(pos, LINUX_AT_HWCAP, cpu_feature);
 
 	/*
