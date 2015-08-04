@@ -2859,16 +2859,16 @@ freebsd32_copyout_strings(struct image_params *imgp)
 	else
 		execpath_len = 0;
 	arginfo = (struct freebsd32_ps_strings *)curproc->p_psstrings;
-	imgp->proc->p_sigcode_base = imgp->proc->p_sigcode_base;
+	imgp->proc->p_sigcode_base = imgp->proc->p_sysent->sv_sigcode_base;
 	if (imgp->proc->p_sigcode_base == 0)
 		szsigcode = *(imgp->proc->p_sysent->sv_szsigcode);
-	else
+	else {
 		szsigcode = 0;
-	destp =	(uintptr_t)arginfo;
-
 #ifdef PAX_ASLR
-	pax_aslr_stack(imgp->proc, &destp);
+		pax_aslr_vdso(imgp->proc, &(imgp->proc->p_sigcode_base));
 #endif
+	}
+	destp =	(uintptr_t)arginfo;
 
 	/*
 	 * install sigcode
