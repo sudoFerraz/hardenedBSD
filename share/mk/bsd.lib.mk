@@ -58,6 +58,8 @@ SHARED_CXXFLAGS+= -g
 CTFFLAGS+= -g
 .endif
 
+LDFLAGS+=	-Wl,-z,relro  -Wl,-z,now
+
 .include <bsd.libnames.mk>
 
 # prefer .s to a .c, add .po, remove stuff not used in the BSD libraries
