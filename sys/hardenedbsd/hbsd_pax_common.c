@@ -38,37 +38,17 @@ __FBSDID("$FreeBSD$");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/exec.h>
 #include <sys/imgact.h>
 #include <sys/imgact_elf.h>
-#include <sys/lock.h>
-#include <sys/mutex.h>
-#include <sys/sx.h>
-#include <sys/sysent.h>
-#include <sys/stat.h>
-#include <sys/proc.h>
-#include <sys/elf_common.h>
-#include <sys/mount.h>
-#include <sys/sysctl.h>
-#include <sys/vnode.h>
-#include <sys/queue.h>
-#include <sys/libkern.h>
 #include <sys/jail.h>
-
-#include <sys/mman.h>
+#include <sys/ktr.h>
 #include <sys/libkern.h>
-#include <sys/exec.h>
-#include <sys/kthread.h>
-
-#include <sys/syslimits.h>
-#include <sys/param.h>
-
-#include <vm/pmap.h>
-#include <vm/vm_map.h>
-#include <vm/vm_extern.h>
-
-#include <machine/elf.h>
-
+#include <sys/mman.h>
 #include <sys/pax.h>
+#include <sys/proc.h>
+#include <sys/stat.h>
+#include <sys/sysctl.h>
 
 static int pax_validate_flags(uint32_t flags);
 static int pax_check_conflicting_modes(uint32_t mode);
@@ -116,9 +96,13 @@ struct prison *
 pax_get_prison(struct proc *p)
 {
 
-	/* p can be NULL with kernel threads, so use prison0 */
+	/* p can be NULL with kernel threads, so use prison0. */
 	if (p == NULL || p->p_ucred == NULL)
 		return (&prison0);
+
+#if 0
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+#endif
 
 	return (p->p_ucred->cr_prison);
 }
@@ -134,7 +118,7 @@ pax_get_prison_td(struct thread *td)
 }
 
 /*
- * @brief Get the current PAX status from process.
+ * @brief Get the current PaX status from process.
  *
  * @param p		The controlled process pointer.
  * @param flags		Where to write the current state.
@@ -176,7 +160,7 @@ pax_check_conflicting_modes(uint32_t mode)
 }
 
 /*
- * @bried Initialize the new process PAX state
+ * @bried Initialize the new process PaX state
  *
  * @param imgp		Executable image's structure.
  * @param mode		Requested mode.
@@ -187,15 +171,12 @@ pax_check_conflicting_modes(uint32_t mode)
 int
 pax_elf(struct image_params *imgp, uint32_t mode)
 {
-	uint32_t flags, flags_aslr, flags_mprotect, flags_pageexec, flags_segvuard, flags_hardening;
+	uint32_t flags;
 
-	flags = mode;
-	flags_aslr = flags_segvuard = flags_hardening = flags_mprotect = flags_pageexec = 0;
-
-	if (pax_validate_flags(flags) != 0) {
+	if (pax_validate_flags(mode) != 0) {
 		pax_log_internal_imgp(imgp, PAX_LOG_DEFAULT,
-		    "unknown paxflags: %x", flags);
-		pax_ulog_internal("unknown paxflags: %x\n", flags);
+		    "unknown paxflags: %x", mode);
+		pax_ulog_internal("unknown paxflags: %x\n", mode);
 
 		return (ENOEXEC);
 	}
@@ -205,33 +186,62 @@ pax_elf(struct image_params *imgp, uint32_t mode)
 		 * indicate flags inconsistencies in dmesg and in user terminal
 		 */
 		pax_log_internal_imgp(imgp, PAX_LOG_DEFAULT,
-		    "inconsistent paxflags: %x", flags);
-		pax_ulog_internal("inconsistent paxflags: %x\n", flags);
+		    "inconsistent paxflags: %x", mode);
+		pax_ulog_internal("inconsistent paxflags: %x\n", mode);
 
 		return (ENOEXEC);
 	}
 
+	flags = 0;
+
 #ifdef PAX_ASLR
-	flags_aslr = pax_aslr_setup_flags(imgp, mode);
+	flags |= pax_aslr_setup_flags(imgp, mode);
+#ifdef MAP_32BIT
+	flags |= pax_disallow_map32bit_setup_flags(imgp, mode);
+#endif
 #endif
 
 #ifdef PAX_NOEXEC
-	flags_pageexec = pax_pageexec_setup_flags(imgp, mode);
-	flags_mprotect = pax_mprotect_setup_flags(imgp, mode);
+	flags |= pax_pageexec_setup_flags(imgp, mode);
+	flags |= pax_mprotect_setup_flags(imgp, mode);
 #endif
 
 #ifdef PAX_SEGVGUARD
-	flags_segvuard = pax_segvguard_setup_flags(imgp, mode);
+	flags |= pax_segvguard_setup_flags(imgp, mode);
 #endif
 
-#ifdef PAX_HARDENING_notyet
-	flags_hardening = pax_hardening_setup_flags(imgp, mode);
+#ifdef PAX_HARDENING
+	flags |= pax_hardening_setup_flags(imgp, mode);
 #endif
-
-	flags = flags_aslr | flags_mprotect | flags_pageexec | flags_segvuard | flags_hardening;
 
 	CTR3(KTR_PAX, "%s : flags = %x mode = %x",
 	    __func__, flags, mode);
+
+	/*
+	 * Recheck the flags after the parsing: prevent broken setups.
+	 */
+	if (pax_validate_flags(flags) != 0) {
+		pax_log_internal_imgp(imgp, PAX_LOG_DEFAULT,
+		    "unknown paxflags after the setup: %x", flags);
+		pax_ulog_internal("unknown paxflags after the setup: %x\n", flags);
+
+		return (ENOEXEC);
+	}
+
+	/*
+	 * Recheck the flags after the parsing: prevent conflicting setups.
+	 * This check should be always false.
+	 */
+	if (pax_check_conflicting_modes(flags) != 0) {
+		/*
+		 * indicate flags inconsistencies in dmesg and in user terminal
+		 */
+		pax_log_internal_imgp(imgp, PAX_LOG_DEFAULT,
+		    "inconsistent paxflags after the setup: %x", flags);
+		pax_ulog_internal("inconsistent paxflags after the setup: %x\n", flags);
+
+		return (ENOEXEC);
+	}
 
 	imgp->proc->p_pax = flags;
 
@@ -256,7 +266,7 @@ static void
 pax_sysinit(void)
 {
 
-	printf("PAX: initialize and check PaX and HardenedBSD features.\n");
+	printf("HBSD: initialize and check HardenedBSD features.\n");
 }
 SYSINIT(pax, SI_SUB_PAX, SI_ORDER_FIRST, pax_sysinit, NULL);
 

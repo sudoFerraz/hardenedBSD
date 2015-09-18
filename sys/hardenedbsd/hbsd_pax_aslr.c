@@ -43,34 +43,24 @@ __FBSDID("$FreeBSD$");
 #include <sys/imgact.h>
 #include <sys/imgact_elf.h>
 #include <sys/jail.h>
-#include <sys/kthread.h>
 #include <sys/ktr.h>
 #include <sys/libkern.h>
-#include <sys/libkern.h>
 #include <sys/mman.h>
-#include <sys/mount.h>
 #include <sys/pax.h>
 #include <sys/proc.h>
-#include <sys/queue.h>
-#include <sys/resourcevar.h>
-#include <sys/stat.h>
-#include <sys/syscallsubr.h>
 #include <sys/sysctl.h>
 #include <sys/sysent.h>
-#include <sys/vnode.h>
 
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
 #include <vm/vm_extern.h>
-
-#include <machine/elf.h>
 
 #ifndef PAX_ASLR_DELTA
 #define	PAX_ASLR_DELTA(delta, lsb, len)	\
 	(((delta) & ((1UL << (len)) - 1)) << (lsb))
 #endif /* PAX_ASLR_DELTA */
 
-/*
+/*-
  * generic ASLR values
  *
  *  	MMAP	| 32 bit | 64 bit | compat |
@@ -82,16 +72,16 @@ __FBSDID("$FreeBSD$");
  * 	| MAX   | 21 bit | 42 bit | 21 bit |
  * 	+-------+--------+--------+--------+
  *                                          
- *  	STACK	| 32 bit | 64 bit | 32 bit |
+ *  	STACK	| 32 bit | 64 bit | compat |
  * 	+-------+--------+--------+--------+
  * 	| MIN	|  8 bit | 16 bit |  8 bit |
  * 	+-------+--------+--------+--------+
- * 	| DEF	|  8 bit | 42 bit |  8 bit |
+ * 	| DEF	| 14 bit | 42 bit |  8 bit |
  * 	+-------+--------+--------+--------+
  * 	| MAX   | 21 bit | 42 bit | 21 bit |
  * 	+-------+--------+--------+--------+
  *                                          
- *  	EXEC	| 32 bit | 64 bit | 32 bit |
+ *  	EXEC	| 32 bit | 64 bit | compat |
  * 	+-------+--------+--------+--------+
  * 	| MIN	|  8 bit | 16 bit |  8 bit |
  * 	+-------+--------+--------+--------+
@@ -100,87 +90,126 @@ __FBSDID("$FreeBSD$");
  * 	| MAX   | 21 bit | 42 bit | 21 bit |
  * 	+-------+--------+--------+--------+
  *
+ *  	VDSO	| 32 bit | 64 bit | compat |
+ * 	+-------+--------+--------+--------+
+ * 	| MIN	|  8 bit | 16 bit |  8 bit |
+ * 	+-------+--------+--------+--------+
+ * 	| DEF	| 10 bit | 28 bit | 10 bit |
+ * 	+-------+--------+--------+--------+
+ * 	| MAX   | 21 bit | 42 bit | 21 bit |
+ * 	+-------+--------+--------+--------+
+ *
+ *  	MAP32BIT| 32 bit | 64 bit | compat |
+ * 	+-------+--------+--------+--------+
+ * 	| MIN	|  N.A.  |  8 bit |  N.A.  |
+ * 	+-------+--------+--------+--------+
+ * 	| DEF	|  N.A.  | 24 bit |  N.A.  |
+ * 	+-------+--------+--------+--------+
+ * 	| MAX   |  N.A.  | 27 bit |  N.A.  |
+ * 	+-------+--------+--------+--------+
+ *
  */
 #ifndef PAX_ASLR_DELTA_MMAP_LSB
 #define PAX_ASLR_DELTA_MMAP_LSB		PAGE_SHIFT
 #endif /* PAX_ASLR_DELTA_MMAP_LSB */
 
 #ifndef PAX_ASLR_DELTA_MMAP_MIN_LEN
-#define PAX_ASLR_DELTA_MMAP_MIN_LEN	((sizeof(void *) * NBBY) / 4)
+#define	PAX_ASLR_DELTA_MMAP_MIN_LEN	((sizeof(void *) * NBBY) / 4)
 #endif /* PAX_ASLR_DELTA_MMAP_MAX_LEN */
 
 #ifndef PAX_ASLR_DELTA_MMAP_MAX_LEN
-#define PAX_ASLR_DELTA_MMAP_MAX_LEN	(((sizeof(void *) * NBBY) * 2) / 3)
+#define	PAX_ASLR_DELTA_MMAP_MAX_LEN	(((sizeof(void *) * NBBY) * 2) / 3)
 #endif /* PAX_ASLR_DELTA_MMAP_MAX_LEN */
 
 #ifndef PAX_ASLR_DELTA_STACK_LSB
-#define PAX_ASLR_DELTA_STACK_LSB	PAGE_SHIFT
+#define	PAX_ASLR_DELTA_STACK_LSB	PAGE_SHIFT
 #endif /* PAX_ASLR_DELTA_STACK_LSB */
 
 #ifndef PAX_ASLR_DELTA_STACK_WITH_GAP_LSB
-#define PAX_ASLR_DELTA_STACK_WITH_GAP_LSB	3
+#define	PAX_ASLR_DELTA_STACK_WITH_GAP_LSB	3
 #endif /* PAX_ASLR_DELTA_STACK_WITH_GAP_LSB */
 
 #ifndef PAX_ASLR_DELTA_STACK_MIN_LEN
-#define PAX_ASLR_DELTA_STACK_MIN_LEN	((sizeof(void *) * NBBY) / 4)
+#define	PAX_ASLR_DELTA_STACK_MIN_LEN	((sizeof(void *) * NBBY) / 4)
 #endif /* PAX_ASLR_DELTA_STACK_MAX_LEN */
 
 #ifndef PAX_ASLR_DELTA_STACK_MAX_LEN
-#define PAX_ASLR_DELTA_STACK_MAX_LEN	(((sizeof(void *) * NBBY) * 2) / 3)
+#define	PAX_ASLR_DELTA_STACK_MAX_LEN	(((sizeof(void *) * NBBY) * 2) / 3)
 #endif /* PAX_ASLR_DELTA_STACK_MAX_LEN */
 
 #ifndef PAX_ASLR_DELTA_EXEC_LSB
-#define PAX_ASLR_DELTA_EXEC_LSB		PAGE_SHIFT
+#define	PAX_ASLR_DELTA_EXEC_LSB		PAGE_SHIFT
 #endif /* PAX_ASLR_DELTA_EXEC_LSB */
 
 #ifndef PAX_ASLR_DELTA_VDSO_LSB
-#define PAX_ASLR_DELTA_VDSO_LSB		PAGE_SHIFT
+#define	PAX_ASLR_DELTA_VDSO_LSB		PAGE_SHIFT
 #endif /* PAX_ASLR_DELTA_VDSO_LSB */
 
+#ifdef MAP_32BIT
+#ifndef PAX_ASLR_DELTA_MAP32BIT_LSB
+#define	PAX_ASLR_DELTA_MAP32BIT_LSB	PAGE_SHIFT
+#endif /* PAX_ASLR_DELTA_MAP32BIT_LSB */
+#endif /* MAP_32BIT */
+
 #ifndef PAX_ASLR_DELTA_EXEC_MIN_LEN
-#define PAX_ASLR_DELTA_EXEC_MIN_LEN	((sizeof(void *) * NBBY) / 4)
+#define	PAX_ASLR_DELTA_EXEC_MIN_LEN	((sizeof(void *) * NBBY) / 4)
 #endif /* PAX_ASLR_DELTA_EXEC_MIN_LEN */
 
 #ifndef PAX_ASLR_DELTA_EXEC_MAX_LEN
-#define PAX_ASLR_DELTA_EXEC_MAX_LEN	(((sizeof(void *) * NBBY) * 2) / 3)
+#define	PAX_ASLR_DELTA_EXEC_MAX_LEN	(((sizeof(void *) * NBBY) * 2) / 3)
 #endif /* PAX_ASLR_DELTA_EXEC_MAX_LEN */
 
 #ifndef PAX_ASLR_DELTA_VDSO_MIN_LEN
-#define PAX_ASLR_DELTA_VDSO_MIN_LEN	12
+#define	PAX_ASLR_DELTA_VDSO_MIN_LEN	((sizeof(void *) * NBBY) / 4)
 #endif /* PAX_ASLR_DELTA_VDSO_MIN_LEN */
 
 #ifndef PAX_ASLR_DELTA_VDSO_MAX_LEN
-#define PAX_ASLR_DELTA_VDSO_MAX_LEN	22
+#define	PAX_ASLR_DELTA_VDSO_MAX_LEN	(((sizeof(void *) * NBBY) * 2) / 3)
 #endif /* PAX_ASLR_DELTA_VDSO_MAX_LEN */
+
+#ifdef MAP_32BIT
+#ifndef PAX_ASLR_DELTA_MAP32BIT_MIN_LEN
+#define	PAX_ASLR_DELTA_MAP32BIT_MIN_LEN	((sizeof(int) * NBBY) / 4)
+#endif /* PAX_ASLR_DELTA_MAP32BIT_MIN_LEN */
+
+#ifndef PAX_ASLR_DELTA_MAP32BIT_MAX_LEN
+#define	PAX_ASLR_DELTA_MAP32BIT_MAX_LEN	(((sizeof(int) * NBBY) * 6) / 7)
+#endif /* PAX_ASLR_DELTA_VDSO_MAX_LEN */
+#endif /* MAP_32BIT */
 
 /*
  * ASLR default values for native host
  */
 #ifdef __LP64__
 #ifndef PAX_ASLR_DELTA_MMAP_DEF_LEN
-#define PAX_ASLR_DELTA_MMAP_DEF_LEN	30
+#define	PAX_ASLR_DELTA_MMAP_DEF_LEN	30
 #endif /* PAX_ASLR_DELTA_MMAP_DEF_LEN */
 #ifndef PAX_ASLR_DELTA_STACK_DEF_LEN
-#define PAX_ASLR_DELTA_STACK_DEF_LEN	42
+#define	PAX_ASLR_DELTA_STACK_DEF_LEN	42
 #endif /* PAX_ASLR_DELTA_STACK_DEF_LEN */
 #ifndef PAX_ASLR_DELTA_EXEC_DEF_LEN
-#define PAX_ASLR_DELTA_EXEC_DEF_LEN	30
+#define	PAX_ASLR_DELTA_EXEC_DEF_LEN	30
 #endif /* PAX_ASLR_DELTA_EXEC_DEF_LEN */
 #ifndef PAX_ASLR_DELTA_VDSO_DEF_LEN
-#define PAX_ASLR_DELTA_VDSO_DEF_LEN	20
+#define	PAX_ASLR_DELTA_VDSO_DEF_LEN	28
 #endif /* PAX_ASLR_DELTA_VDSO_DEF_LEN */
+#ifdef MAP_32BIT
+#ifndef PAX_ASLR_DELTA_MAP32BIT_DEF_LEN
+#define	PAX_ASLR_DELTA_MAP32BIT_DEF_LEN	24
+#endif /* PAX_ASLR_DELTA_MAP32BIT_DEF_LEN */
+#endif /* MAP_32BIT */
 #else /* ! __LP64__ */
 #ifndef PAX_ASLR_DELTA_MMAP_DEF_LEN
-#define PAX_ASLR_DELTA_MMAP_DEF_LEN	14
+#define	PAX_ASLR_DELTA_MMAP_DEF_LEN	14
 #endif /* PAX_ASLR_DELTA_MMAP_DEF_LEN */
 #ifndef PAX_ASLR_DELTA_STACK_DEF_LEN
-#define PAX_ASLR_DELTA_STACK_DEF_LEN	PAX_ASLR_DELTA_STACK_MIN_LEN
+#define	PAX_ASLR_DELTA_STACK_DEF_LEN	14
 #endif /* PAX_ASLR_DELTA_STACK_DEF_LEN */
 #ifndef PAX_ASLR_DELTA_EXEC_DEF_LEN
-#define PAX_ASLR_DELTA_EXEC_DEF_LEN	14
+#define	PAX_ASLR_DELTA_EXEC_DEF_LEN	14
 #endif /* PAX_ASLR_DELTA_EXEC_DEF_LEN */
 #ifndef PAX_ASLR_DELTA_VDSO_DEF_LEN
-#define PAX_ASLR_DELTA_VDSO_DEF_LEN	10
+#define	PAX_ASLR_DELTA_VDSO_DEF_LEN	10
 #endif /* PAX_ASLR_DELTA_VDSO_DEF_LEN */
 #endif /* __LP64__ */
 
@@ -229,11 +258,11 @@ __FBSDID("$FreeBSD$");
 #endif /* PAX_ASLR_COMPAT_DELTA_EXEC_MAX_LEN */
 
 #ifndef PAX_ASLR_COMPAT_DELTA_VDSO_MIN_LEN
-#define PAX_ASLR_COMPAT_DELTA_VDSO_MIN_LEN	6
+#define PAX_ASLR_COMPAT_DELTA_VDSO_MIN_LEN	((sizeof(int) * NBBY) / 4)
 #endif /* PAX_ASLR_COMPAT_DELTA_VDSO_MAX_LEN */
 
 #ifndef PAX_ASLR_COMPAT_DELTA_VDSO_MAX_LEN
-#define PAX_ASLR_COMPAT_DELTA_VDSO_MAX_LEN	12
+#define PAX_ASLR_COMPAT_DELTA_VDSO_MAX_LEN	(((sizeof(int) * NBBY) * 2) / 3)
 #endif /* PAX_ASLR_COMPAT_DELTA_VDSO_MAX_LEN */
 #endif
 
@@ -244,6 +273,14 @@ static int pax_aslr_mmap_len = PAX_ASLR_DELTA_MMAP_DEF_LEN;
 static int pax_aslr_stack_len = PAX_ASLR_DELTA_STACK_DEF_LEN;
 static int pax_aslr_exec_len = PAX_ASLR_DELTA_EXEC_DEF_LEN;
 static int pax_aslr_vdso_len = PAX_ASLR_DELTA_VDSO_DEF_LEN;
+#ifdef MAP_32BIT
+static int pax_aslr_map32bit_len = PAX_ASLR_DELTA_MAP32BIT_DEF_LEN;
+#ifdef PAX_HARDENING
+static int pax_disallow_map32bit_status_global = PAX_FEATURE_OPTOUT;
+#else
+static int pax_disallow_map32bit_status_global = PAX_FEATURE_OPTIN;
+#endif
+#endif
 
 #ifdef COMPAT_FREEBSD32
 static int pax_aslr_compat_status = PAX_FEATURE_OPTOUT;
@@ -258,6 +295,10 @@ TUNABLE_INT("hardening.pax.aslr.mmap_len", &pax_aslr_mmap_len);
 TUNABLE_INT("hardening.pax.aslr.stack_len", &pax_aslr_stack_len);
 TUNABLE_INT("hardening.pax.aslr.exec_len", &pax_aslr_exec_len);
 TUNABLE_INT("hardening.pax.aslr.vdso_len", &pax_aslr_vdso_len);
+#ifdef MAP_32BIT
+TUNABLE_INT("hardening.pax.aslr.map32bit_len", &pax_aslr_map32bit_len);
+TUNABLE_INT("hardening.pax.disallow_map32bit.status", &pax_disallow_map32bit_status_global);
+#endif
 #ifdef COMPAT_FREEBSD32
 TUNABLE_INT("hardening.pax.aslr.compat.status", &pax_aslr_compat_status);
 TUNABLE_INT("hardening.pax.aslr.compat.mmap_len", &pax_aslr_compat_mmap_len);
@@ -277,6 +318,10 @@ static int sysctl_pax_aslr_mmap(SYSCTL_HANDLER_ARGS);
 static int sysctl_pax_aslr_stack(SYSCTL_HANDLER_ARGS);
 static int sysctl_pax_aslr_exec(SYSCTL_HANDLER_ARGS);
 static int sysctl_pax_aslr_vdso(SYSCTL_HANDLER_ARGS);
+#ifdef MAP_32BIT
+static int sysctl_pax_aslr_map32bit(SYSCTL_HANDLER_ARGS);
+static int sysctl_pax_disallow_map32bit(SYSCTL_HANDLER_ARGS);
+#endif
 
 SYSCTL_NODE(_hardening_pax, OID_AUTO, aslr, CTLFLAG_RD, 0,
     "Address Space Layout Randomization.");
@@ -294,25 +339,33 @@ SYSCTL_PROC(_hardening_pax_aslr, OID_AUTO, mmap_len,
     CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON|CTLFLAG_SECURE,
     NULL, 0, sysctl_pax_aslr_mmap, "I",
     "Number of bits randomized for mmap(2) calls. "
-    "32 bit: [8,20] 64 bit: [16,32]");
+    "32 bit: [8,21] 64 bit: [16,42]");
 
 SYSCTL_PROC(_hardening_pax_aslr, OID_AUTO, stack_len,
     CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON|CTLFLAG_SECURE,
     NULL, 0, sysctl_pax_aslr_stack, "I",
     "Number of bits randomized for the stack. "
-    "32 bit: [6,12] 64 bit: [12,21]");
+    "32 bit: [8,12] 64 bit: [16,42]");
 
 SYSCTL_PROC(_hardening_pax_aslr, OID_AUTO, exec_len,
     CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON|CTLFLAG_SECURE,
     NULL, 0, sysctl_pax_aslr_exec, "I",
     "Number of bits randomized for the PIE exec base. "
-    "32 bit: [6,20] 64 bit: [12,21]");
+    "32 bit: [8,21] 64 bit: [16,42]");
 
 SYSCTL_PROC(_hardening_pax_aslr, OID_AUTO, vdso_len,
     CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON|CTLFLAG_SECURE,
     NULL, 0, sysctl_pax_aslr_vdso, "I",
     "Number of bits randomized for the VDSO base. "
-    "32 bit: [6,20] 64 bit: [12,21]");
+    "32 bit: [8,21] 64 bit: [16,42]");
+
+#ifdef MAP_32BIT
+SYSCTL_PROC(_hardening_pax_aslr, OID_AUTO, map32bit_len,
+    CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON|CTLFLAG_SECURE,
+    NULL, 0, sysctl_pax_aslr_map32bit, "I",
+    "Number of bits randomized for the MAP_32BIT mmap. "
+    "32 bit: not exists 64 bit: [8,27]");
+#endif
 
 static int
 sysctl_pax_aslr_status(SYSCTL_HANDLER_ARGS)
@@ -444,6 +497,33 @@ sysctl_pax_aslr_vdso(SYSCTL_HANDLER_ARGS)
 	return (0);
 }
 
+#ifdef MAP_32BIT
+static int
+sysctl_pax_aslr_map32bit(SYSCTL_HANDLER_ARGS)
+{
+	struct prison *pr;
+	int err, val;
+
+	pr = pax_get_prison_td(req->td);
+
+	val = pr->pr_hardening.hr_pax_aslr_map32bit_len;
+	err = sysctl_handle_int(oidp, &val, sizeof(int), req);
+	if (err || (req->newptr == NULL))
+		return (err);
+
+	if (val < PAX_ASLR_DELTA_MAP32BIT_MIN_LEN ||
+	    val > PAX_ASLR_DELTA_MAP32BIT_MAX_LEN)
+		return (EINVAL);
+
+	if (pr == &prison0)
+		pax_aslr_map32bit_len = val;
+
+	pr->pr_hardening.hr_pax_aslr_map32bit_len = val;
+
+	return (0);
+}
+#endif /* MAP_32BIT */
+
 /* COMPAT_FREEBSD32 and linuxulator. */
 #ifdef COMPAT_FREEBSD32
 static int sysctl_pax_aslr_compat_status(SYSCTL_HANDLER_ARGS);
@@ -468,25 +548,25 @@ SYSCTL_PROC(_hardening_pax_aslr_compat, OID_AUTO, mmap_len,
     CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON,
     NULL, 0, sysctl_pax_aslr_compat_mmap, "I",
     "Number of bits randomized for mmap(2) calls. "
-    "32 bit: [8,16]");
+    "32 bit: [8,21]");
 
 SYSCTL_PROC(_hardening_pax_aslr_compat, OID_AUTO, stack_len,
     CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON,
     NULL, 0, sysctl_pax_aslr_compat_stack, "I",
     "Number of bits randomized for the stack. "
-    "32 bit: [6,12]");
+    "32 bit: [8,21]");
 
 SYSCTL_PROC(_hardening_pax_aslr_compat, OID_AUTO, exec_len,
     CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON,
     NULL, 0, sysctl_pax_aslr_compat_exec, "I",
     "Number of bits randomized for the PIE exec base. "
-    "32 bit: [6,12]");
+    "32 bit: [8,21]");
 
 SYSCTL_PROC(_hardening_pax_aslr_compat, OID_AUTO, vdso_len,
     CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON,
     NULL, 0, sysctl_pax_aslr_compat_vdso, "I",
     "Number of bits randomized for the VDSO base. "
-    "32 bit: [6,12]");
+    "32 bit: [8,21]");
 
 static int
 sysctl_pax_aslr_compat_status(SYSCTL_HANDLER_ARGS)
@@ -619,6 +699,51 @@ sysctl_pax_aslr_compat_vdso(SYSCTL_HANDLER_ARGS)
 }
 
 #endif /* COMPAT_FREEBSD32 */
+
+#ifdef MAP_32BIT
+SYSCTL_NODE(_hardening_pax, OID_AUTO, disallow_map32bit, CTLFLAG_RD, 0,
+    "Disallow MAP_32BIT mode mmap(2) calls.");
+
+SYSCTL_PROC(_hardening_pax_disallow_map32bit, OID_AUTO, status,
+    CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON|CTLFLAG_SECURE,
+    NULL, 0, sysctl_pax_disallow_map32bit, "I",
+    "Restriction status:"
+    "0 - disabled, "
+    "1 - opt-in, "
+    "2 - opt-out, "
+    "3 - force enabled.");
+
+static int
+sysctl_pax_disallow_map32bit(SYSCTL_HANDLER_ARGS)
+{
+	struct prison *pr;
+	int err, val;
+
+	pr = pax_get_prison_td(req->td);
+
+	val = pr->pr_hardening.hr_pax_disallow_map32bit_status;
+	err = sysctl_handle_int(oidp, &val, sizeof(int), req);
+	if (err || (req->newptr == NULL))
+		return (err);
+
+	switch (val) {
+	case PAX_FEATURE_DISABLED:
+	case PAX_FEATURE_OPTIN:
+	case PAX_FEATURE_OPTOUT:
+	case PAX_FEATURE_FORCE_ENABLED:
+		if (pr == &prison0)
+			pax_disallow_map32bit_status_global = val;
+
+		pr->pr_hardening.hr_pax_disallow_map32bit_status = val;
+		break;
+	default:
+		return (EINVAL);
+	}
+
+	return (0);
+}
+#endif	/* MAP_32BIT */
+
 #endif /* PAX_SYSCTLS */
 
 
@@ -637,16 +762,34 @@ pax_aslr_sysinit(void)
 	case PAX_FEATURE_FORCE_ENABLED:
 		break;
 	default:
-		printf("[PAX ASLR] WARNING, invalid PAX settings in loader.conf!"
+		printf("[HBSD ASLR] WARNING, invalid PAX settings in loader.conf!"
 		    " (pax_aslr_status = %d)\n", pax_aslr_status);
 		pax_aslr_status = PAX_FEATURE_FORCE_ENABLED;
 		break;
 	}
-	printf("[PAX ASLR] status: %s\n", pax_status_str[pax_aslr_status]);
-	printf("[PAX ASLR] mmap: %d bit\n", pax_aslr_mmap_len);
-	printf("[PAX ASLR] exec base: %d bit\n", pax_aslr_exec_len);
-	printf("[PAX ASLR] stack: %d bit\n", pax_aslr_stack_len);
-	printf("[PAX ASLR] vdso: %d bit\n", pax_aslr_vdso_len);
+	printf("[HBSD ASLR] status: %s\n", pax_status_str[pax_aslr_status]);
+	printf("[HBSD ASLR] mmap: %d bit\n", pax_aslr_mmap_len);
+	printf("[HBSD ASLR] exec base: %d bit\n", pax_aslr_exec_len);
+	printf("[HBSD ASLR] stack: %d bit\n", pax_aslr_stack_len);
+	printf("[HBSD ASLR] vdso: %d bit\n", pax_aslr_vdso_len);
+#ifdef MAP_32BIT
+	printf("[HBSD ASLR] map32bit: %d bit\n", pax_aslr_map32bit_len);
+
+	switch (pax_disallow_map32bit_status_global) {
+	case PAX_FEATURE_DISABLED:
+	case PAX_FEATURE_OPTIN:
+	case PAX_FEATURE_OPTOUT:
+	case PAX_FEATURE_FORCE_ENABLED:
+		break;
+	default:
+		printf("[HBSD ASLR] WARNING, invalid settings in loader.conf!"
+		    " (hardening.pax.disallow_map32bit.status = %d)\n",
+		    pax_disallow_map32bit_status_global);
+		pax_disallow_map32bit_status_global = PAX_FEATURE_FORCE_ENABLED;
+	}
+	printf("[HBSD ASLR] disallow MAP_32BIT mode mmap: %s\n",
+	    pax_status_str[pax_disallow_map32bit_status_global]);
+#endif
 }
 SYSINIT(pax_aslr, SI_SUB_PAX, SI_ORDER_SECOND, pax_aslr_sysinit, NULL);
 
@@ -675,6 +818,7 @@ pax_aslr_init_vmspace(struct proc *p)
 	struct prison *pr;
 	struct vmspace *vm;
 	unsigned long rand_buf;
+	int try;
 
 	vm = p->p_vmspace;
 	KASSERT(vm != NULL, ("%s: vm is null", __func__));
@@ -686,32 +830,65 @@ pax_aslr_init_vmspace(struct proc *p)
 	    pr->pr_hardening.hr_pax_aslr_mmap_len);
 
 	arc4rand(&rand_buf, sizeof(rand_buf), 0);
+	vm->vm_aslr_delta_exec = PAX_ASLR_DELTA(rand_buf,
+	    PAX_ASLR_DELTA_EXEC_LSB,
+	    pr->pr_hardening.hr_pax_aslr_exec_len);
+
+	try = 3;
+try_again:
+	/*
+	 * In stack case we generate a bigger random, which consists
+	 * of two parts.
+	 * The first upper part [pax_aslr_stack_len .. PAGE_SHIFT+1]
+	 * applied to mapping, the second lower part [PAGE_SHIFT .. 3]
+	 * applied in the mapping as gap.
+	 */
+	arc4rand(&rand_buf, sizeof(rand_buf), 0);
 	vm->vm_aslr_delta_stack = PAX_ASLR_DELTA(rand_buf,
 	    PAX_ASLR_DELTA_STACK_WITH_GAP_LSB,
 	    pr->pr_hardening.hr_pax_aslr_stack_len);
 	vm->vm_aslr_delta_stack = ALIGN(vm->vm_aslr_delta_stack);
 
 	arc4rand(&rand_buf, sizeof(rand_buf), 0);
-	vm->vm_aslr_delta_exec = PAX_ASLR_DELTA(rand_buf,
-	    PAX_ASLR_DELTA_EXEC_LSB,
-	    pr->pr_hardening.hr_pax_aslr_exec_len);
-
-	arc4rand(&rand_buf, sizeof(rand_buf), 0);
 	rand_buf = PAX_ASLR_DELTA(rand_buf,
 	    PAX_ASLR_DELTA_VDSO_LSB,
 	    pr->pr_hardening.hr_pax_aslr_vdso_len);
+
 	/*
-	 * XXX Stability fix.
-	 *
 	 * Place the vdso between the stacktop and
 	 * vm_max_user-PAGE_SIZE.
+	 *
+	 * In future this will change, to place them between the 
+	 * stack and heap.
 	 */
-	if (rand_buf >= vm->vm_aslr_delta_stack)
-		rand_buf = rand_buf %
-		    ((unsigned long)vm->vm_aslr_delta_stack &
-		    (-1UL << PAX_ASLR_DELTA_STACK_LSB));
-	rand_buf &= (-1UL << PAX_ASLR_DELTA_VDSO_LSB);
+
+	/* 
+	 * This check required to handle the case 
+	 * when PAGE_ALIGN(vm->vm_aslr_delta_stack) == 0.
+	 */
+	if ((vm->vm_aslr_delta_stack & (-1UL << PAX_ASLR_DELTA_VDSO_LSB)) != 0) {
+		if (rand_buf > vm->vm_aslr_delta_stack) {
+			rand_buf = rand_buf %
+			    ((unsigned long)vm->vm_aslr_delta_stack &
+			    (-1UL << PAX_ASLR_DELTA_STACK_LSB));
+			rand_buf &= (-1UL << PAX_ASLR_DELTA_VDSO_LSB);
+		}
+	} else if (try > 0) {
+		try--;
+		goto try_again;
+	} else {
+		/* XXX: Instead of 0, should we place them at the end of heap? */
+		pax_log_aslr(p, PAX_LOG_DEFAULT, "%s check your /boot/loader.conf ...", __func__);
+		rand_buf = 0;
+	}
 	vm->vm_aslr_delta_vdso = rand_buf;
+
+#ifdef MAP_32BIT
+	arc4rand(&rand_buf, sizeof(rand_buf), 0);
+	vm->vm_aslr_delta_map32bit = PAX_ASLR_DELTA(rand_buf,
+	    PAX_ASLR_DELTA_MAP32BIT_LSB,
+	    pr->pr_hardening.hr_pax_aslr_map32bit_len);
+#endif
 
 	CTR2(KTR_PAX, "%s: vm_aslr_delta_mmap=%p\n",
 	    __func__, (void *)vm->vm_aslr_delta_mmap);
@@ -721,6 +898,10 @@ pax_aslr_init_vmspace(struct proc *p)
 	    __func__, (void *)vm->vm_aslr_delta_exec);
 	CTR2(KTR_PAX, "%s: vm_aslr_delta_vdso=%p\n",
 	    __func__, (void *)vm->vm_aslr_delta_vdso);
+#ifdef MAP_32BIT
+	CTR2(KTR_PAX, "%s: vm_aslr_delta_map32bit=%p\n",
+	    __func__, (void *)vm->vm_aslr_delta_map32bit);
+#endif
 }
 
 #ifdef COMPAT_FREEBSD32
@@ -735,16 +916,16 @@ pax_compat_aslr_sysinit(void)
 	case PAX_FEATURE_FORCE_ENABLED:
 		break;
 	default:
-		printf("[PAX ASLR (compat)] WARNING, invalid PAX settings in loader.conf! "
+		printf("[HBSD ASLR (compat)] WARNING, invalid PAX settings in loader.conf! "
 		    "(pax_aslr_compat_status = %d)\n", pax_aslr_compat_status);
 		pax_aslr_compat_status = PAX_FEATURE_FORCE_ENABLED;
 		break;
 	}
-	printf("[PAX ASLR (compat)] status: %s\n", pax_status_str[pax_aslr_compat_status]);
-	printf("[PAX ASLR (compat)] mmap: %d bit\n", pax_aslr_compat_mmap_len);
-	printf("[PAX ASLR (compat)] exec base: %d bit\n", pax_aslr_compat_exec_len);
-	printf("[PAX ASLR (compat)] stack: %d bit\n", pax_aslr_compat_stack_len);
-	printf("[PAX ASLR (compat)] vdso: %d bit\n", pax_aslr_compat_vdso_len);
+	printf("[HBSD ASLR (compat)] status: %s\n", pax_status_str[pax_aslr_compat_status]);
+	printf("[HBSD ASLR (compat)] mmap: %d bit\n", pax_aslr_compat_mmap_len);
+	printf("[HBSD ASLR (compat)] exec base: %d bit\n", pax_aslr_compat_exec_len);
+	printf("[HBSD ASLR (compat)] stack: %d bit\n", pax_aslr_compat_stack_len);
+	printf("[HBSD ASLR (compat)] vdso: %d bit\n", pax_aslr_compat_vdso_len);
 }
 SYSINIT(pax_compat_aslr, SI_SUB_PAX, SI_ORDER_SECOND, pax_compat_aslr_sysinit, NULL);
 
@@ -789,7 +970,7 @@ pax_aslr_init_vmspace32(struct proc *p)
 	CTR2(KTR_PAX, "%s: vm_aslr_delta_vdso=%p\n",
 	    __func__, (void *)vm->vm_aslr_delta_vdso);
 }
-#endif
+#endif	/* COMPAT_FREEBSD32 */
 
 void
 pax_aslr_init(struct image_params *imgp)
@@ -825,6 +1006,12 @@ pax_aslr_init_prison(struct prison *pr)
 		    pax_aslr_exec_len;
 		pr->pr_hardening.hr_pax_aslr_vdso_len =
 		    pax_aslr_vdso_len;
+#ifdef MAP_32BIT
+		pr->pr_hardening.hr_pax_aslr_map32bit_len =
+		    pax_aslr_map32bit_len;
+		pr->pr_hardening.hr_pax_disallow_map32bit_status =
+		    pax_disallow_map32bit_status_global;
+#endif
 	} else {
 		KASSERT(pr->pr_parent != NULL,
 		   ("%s: pr->pr_parent == NULL", __func__));
@@ -840,6 +1027,12 @@ pax_aslr_init_prison(struct prison *pr)
 		    pr_p->pr_hardening.hr_pax_aslr_exec_len;
 		pr->pr_hardening.hr_pax_aslr_vdso_len =
 		    pr_p->pr_hardening.hr_pax_aslr_vdso_len;
+#ifdef MAP_32BIT
+		pr->pr_hardening.hr_pax_aslr_map32bit_len =
+		    pr_p->pr_hardening.hr_pax_aslr_map32bit_len;
+		pr->pr_hardening.hr_pax_disallow_map32bit_status =
+		    pr_p->pr_hardening.hr_pax_disallow_map32bit_status;
+#endif
 	}
 }
 
@@ -924,54 +1117,6 @@ pax_aslr_mmap(struct proc *p, vm_offset_t *addr, vm_offset_t orig_addr, int flag
 		CTR4(KTR_PAX, "%s: not applying to %p orig_addr=%p flags=%x\n",
 		    __func__, (void *)*addr, (void *)orig_addr, flags);
 }
-
-#ifdef MAP_32BIT
-void
-pax_aslr_mmap_map_32bit(struct proc *p, vm_offset_t *addr, vm_offset_t orig_addr, int flags)
-{
-	int len_32bit;
-
-	PROC_LOCK_ASSERT(p, MA_OWNED);
-
-	if (((flags & MAP_32BIT) != MAP_32BIT) || !pax_aslr_active(p))
-		return;
-
-	KASSERT((flags & MAP_32BIT) == MAP_32BIT,
-	    ("%s: we can't handle not MAP_32BIT mapping here", __func__));
-	KASSERT((flags & MAP_FIXED) != MAP_FIXED,
-	    ("%s: we can't randomize MAP_FIXED mapping", __func__));
-
-	/*
-	 * From original PaX doc:
-	 *
-	 * PaX applies randomization (delta_mmap) to TASK_UNMAPPED_BASE in bits 12-27
-	 * (16 bits) and ignores the hint for file mappings (unfortunately there is
-	 * a 'feature' in linuxthreads where the thread stack mappings do not specify
-	 * MAP_FIXED but still expect that behaviour so the hint cannot be overriden
-	 * for anonymous mappings).
-	 *
-	 * https://github.com/HardenedBSD/pax-docs-mirror/blob/master/randmmap.txt#L30
-	 */
-	if ((orig_addr == 0) || !(flags & MAP_ANON)) {
-		CTR4(KTR_PAX, "%s: applying to %p orig_addr=%p flags=%x\n",
-				__func__, (void *)*addr, (void *)orig_addr, flags);
-
-#ifdef COMPAT_FREEBSD32
-		len_32bit = pax_aslr_compat_mmap_len;
-#else
-		len_32bit = PAX_ASLR_COMPAT_DELTA_MMAP_MAX_LEN;
-#endif
-		/*
-		 * XXXOP - use proper pregenerated randoms here, rather than generate
-		 * every time new random. Currently in MAP_32bit case is an ASR, and
-		 * not ASLR.
-		 */
-		*addr += PAX_ASLR_DELTA(arc4random(), PAX_ASLR_COMPAT_DELTA_MMAP_LSB,
-		    len_32bit);
-		CTR2(KTR_PAX, "%s: result %p\n", __func__, (void *)*addr);
-	}
-}
-#endif
 
 void
 pax_aslr_rtld(struct proc *p, vm_offset_t *addr)
@@ -1124,7 +1269,7 @@ pax_aslr_setup_flags(struct image_params *imgp, uint32_t mode)
 	}
 
 	/*
-	 * unknown status, force ASLR
+	 * Unknown status, force ASLR.
 	 */
 	flags |= PAX_NOTE_ASLR;
 	flags &= ~PAX_NOTE_NOASLR;
@@ -1133,4 +1278,124 @@ pax_aslr_setup_flags(struct image_params *imgp, uint32_t mode)
 
 	return (flags);
 }
+
+#ifdef MAP_32BIT
+void
+pax_aslr_mmap_map_32bit(struct proc *p, vm_offset_t *addr, vm_offset_t orig_addr, int flags)
+{
+
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+
+	if (((flags & MAP_32BIT) != MAP_32BIT) || !pax_aslr_active(p))
+		return;
+
+	KASSERT((flags & MAP_32BIT) == MAP_32BIT,
+	    ("%s: we can't handle not MAP_32BIT mapping here", __func__));
+	KASSERT((flags & MAP_FIXED) != MAP_FIXED,
+	    ("%s: we can't randomize MAP_FIXED mapping", __func__));
+
+	/*
+	 * From original PaX doc:
+	 *
+	 * PaX applies randomization (delta_mmap) to TASK_UNMAPPED_BASE in bits 12-27
+	 * (16 bits) and ignores the hint for file mappings (unfortunately there is
+	 * a 'feature' in linuxthreads where the thread stack mappings do not specify
+	 * MAP_FIXED but still expect that behaviour so the hint cannot be overriden
+	 * for anonymous mappings).
+	 *
+	 * https://github.com/HardenedBSD/pax-docs-mirror/blob/master/randmmap.txt#L30
+	 */
+	if ((orig_addr == 0) || !(flags & MAP_ANON)) {
+		CTR4(KTR_PAX, "%s: applying to %p orig_addr=%p flags=%x\n",
+				__func__, (void *)*addr, (void *)orig_addr, flags);
+
+		*addr += p->p_vmspace->vm_aslr_delta_map32bit;
+		CTR2(KTR_PAX, "%s: result %p\n", __func__, (void *)*addr);
+	}
+}
+
+int
+pax_disallow_map32bit_active(struct thread *td, int mmap_flags)
+{
+	uint32_t flags;
+
+	if ((mmap_flags & MAP_32BIT) != MAP_32BIT)
+		/*
+		 * Fast path, the mmap request does not
+		 * contains MAP_32BIT flag.
+		 */
+		return (false);
+
+	/* XXXOP: pax_get_flags_td(...) here? */
+	pax_get_flags(td->td_proc, &flags);
+
+	CTR3(KTR_PAX, "%S: pid = %d p_pax = %x",
+	    __func__, td->td_proc->p_pid, flags);
+
+	if ((flags & PAX_NOTE_DISALLOWMAP32BIT) == PAX_NOTE_DISALLOWMAP32BIT)
+		return (true);
+
+	if ((flags & PAX_NOTE_NODISALLOWMAP32BIT) == PAX_NOTE_NODISALLOWMAP32BIT)
+		return (false);
+
+	return (true);
+}
+
+uint32_t
+pax_disallow_map32bit_setup_flags(struct image_params *imgp, uint32_t mode)
+{
+	struct prison *pr;
+	uint32_t flags, status;
+
+	flags = 0;
+	status = 0;
+
+	pr = pax_get_prison(imgp->proc);
+	status = pr->pr_hardening.hr_pax_disallow_map32bit_status;
+
+	if (status == PAX_FEATURE_DISABLED) {
+		flags &= ~PAX_NOTE_DISALLOWMAP32BIT;
+		flags |= PAX_NOTE_NODISALLOWMAP32BIT;
+
+		return (flags);
+	}
+
+	if (status == PAX_FEATURE_FORCE_ENABLED) {
+		flags &= ~PAX_NOTE_NODISALLOWMAP32BIT;
+		flags |= PAX_NOTE_DISALLOWMAP32BIT;
+
+		return (flags);
+	}
+
+	if (status == PAX_FEATURE_OPTIN) {
+		if (mode & PAX_NOTE_DISALLOWMAP32BIT) {
+			flags |= PAX_NOTE_DISALLOWMAP32BIT;
+			flags &= ~PAX_NOTE_NODISALLOWMAP32BIT;
+		} else {
+			flags &= ~PAX_NOTE_DISALLOWMAP32BIT;
+			flags |= PAX_NOTE_NODISALLOWMAP32BIT;
+		}
+
+		return (flags);
+	}
+
+	if (status == PAX_FEATURE_OPTOUT) {
+		if (mode & PAX_NOTE_NODISALLOWMAP32BIT) {
+			flags |= PAX_NOTE_NODISALLOWMAP32BIT;
+			flags &= ~PAX_NOTE_DISALLOWMAP32BIT;
+		} else {
+			flags &= ~PAX_NOTE_NODISALLOWMAP32BIT;
+			flags |= PAX_NOTE_DISALLOWMAP32BIT;
+		}
+
+		return (flags);
+	}
+
+	/* Unknown status, force MAP32 restriction. */
+	flags |= PAX_NOTE_DISALLOWMAP32BIT;
+	flags &= ~PAX_NOTE_NODISALLOWMAP32BIT;
+
+	return (flags);
+}
+#endif	/* MAP_32BIT */
 

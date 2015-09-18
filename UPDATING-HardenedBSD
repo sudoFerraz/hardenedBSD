@@ -1,3 +1,63 @@
+[20151218] reworked MAP_32BIT mmap randomization
+__HardenedBSD_version = 38
+
+	Previously the MAP_32BIT case mmap randomization was an ASR,
+	to fix this and some other issue with the MAP_32BIT related
+	mmap, implement a proper ASLR.
+
+	Upstream fixed stability issues with higher order PID randomization
+
+
+[20151208] revert the reworked internal structures
+__HardenedBSD_version = 37
+
+	revert: Change pax_get_prison(...) to pax_get_prison_td(...) where possible.
+	revert: Changed pax_elf signature.
+
+
+[20151206] rework internal structures
+__HardenedBSD_version = 36
+
+	Change pax_get_prison(...) to pax_get_prison_td(...) where possible.
+	Change noexec's sysctl handlers.
+	Fix one segvguard related issue.
+	Fix randompid related issue.
+	Changed pax_elf signature.
+
+
+[20151123] N.A.
+__HardenedBSD_version = 35
+
+	Not exists on 10-STABLE
+	
+
+[20151018] disabled lib32 build by default
+__HardenedBSD_version = 34
+
+	Do not build lib32 and 32bit related stuffs on 64bit platforms
+	by default.
+
+
+[20150915] ASLR changes
+__HardenedBSD_version = 32
+
+	Changed default VDSO randomization from 20 bits to 28 bits.
+	Fixed div by zero in rare cases in pax_aslr_init_vmspace.
+
+
+[20150907] Reworked DISALLOWMAP32BIT and changes some internal functions
+__HardenedBSD_version = 31
+
+	Rename and correctly paxify the DISALLOWMAP32BIT.
+	Changed pax flags setup.
+
+
+[20150905] Added MAP32_PROTECT
+__HardenedBSD_version = 30
+
+	Added per-process mode to disable MAP_32BIT mode mmap(2).
+
+
 [20150823] Fixed pkg bootstrap
 __HardenedBSD_version = 29
 
