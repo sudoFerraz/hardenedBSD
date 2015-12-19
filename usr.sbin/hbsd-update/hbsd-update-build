@@ -144,8 +144,9 @@ build_kernel_archives() {
 	done
 }
 
-setup_outputdir() {
+setup_directories() {
 	mkdir -p ${STAGEDIR}
+	mkdir -p ${OUTPUTDIR}
 }
 
 add_extra_files() {
@@ -195,7 +196,7 @@ sign_artifacts() {
 
 git_version() {
 	cd /usr/src
-	git log -n 1 --format=format:o%H
+	git log -n 1 --format=format:%H
 }
 
 build_update_archive() {
@@ -241,7 +242,7 @@ main() {
 
 	cleanup_chroot
 	setup_chroot
-	setup_outputdir
+	setup_directories
 	clone_source
 	create_src_conf
 	build_source
