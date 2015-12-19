@@ -195,12 +195,18 @@ sign_artifacts() {
 }
 
 git_version() {
-	cd /usr/src
+	cd ${CHROOTDIR}/usr/src
 	git log -n 1 --format=format:%H
 }
 
+hbsd_version() {
+	grep -F __HardenedBSD_version \
+		${CHROOTDIR}/usr/src/sys/sys/pax.h | \
+		awk '{print $3;}'
+}
+
 build_update_archive() {
-	ver=$(git_version)
+	ver="hbsd-v$(hbsd_version)-$(git_version)"
 
 	cd ${STAGEDIR}
 	tar -cf ${OUTPUTDIR}/update-${ver}.tar .
