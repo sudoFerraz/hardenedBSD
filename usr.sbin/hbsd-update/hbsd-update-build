@@ -1,0 +1,257 @@
+#!/bin/sh
+#-
+# Copyright (c) 2015 HardenedBSD
+# Author: Shawn Webb <shawn.webb@hardenedbsd.org>
+#
+# This work originally sponsored by G2, Inc
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+# This script builds the update archive.
+#
+# Dependencies:
+#	1) git
+#	2) OpenSSL
+
+debug_print() {
+	echo ${1} >&2
+}
+
+usage() {
+	debug_print "USAGE: ${0} [-c build.conf]"
+	exit 1
+}
+
+setup_environment() {
+	REPO="git://github.com/HardenedBSD/hardenedBSD.git"
+	BRANCH="hardened/current/master"
+	PRIVKEY="/usr/share/keys/updater/private/updater.key"
+	PUBKEY="/usr/share/keys/updater/certs/updater.crt"
+	SIGNBIN="/usr/bin/openssl"
+	KERNELS="HARDENEDBSD"
+	SRCDIR="/usr/src"
+	STAGEDIR="/builds/updater/stage/$(date '+%F_%T')"
+	OUTPUTDIR="/builds/updater/output"
+	CHROOTDIR="/builds/updater/chroot"
+	FULLCLEAN="no"
+}
+
+cleanup_chroot() {
+	if [ ! -d ${CHROOTDIR} ]; then
+		return 0
+	fi
+
+	if mount | grep -q ${CHROOTDIR}/dev; then
+		umount ${CHROOTDIR}/dev
+	fi
+
+	if [ ! ${FULLCLEAN} = "no" ]; then
+		chflags -R noschg ${CHROOTDIR}
+		rm -rf ${CHROOTDIR}
+	fi
+}
+
+setup_chroot() {
+	if ! mount | grep -q ${CHROOTDIR}/dev; then
+		if [ ! -d ${CHROOTDIR}/dev ]; then
+			mkdir -p ${CHROOTDIR}/dev
+		fi
+
+		mount -t devfs devfs ${CHROOTDIR}/dev
+	fi
+
+	cd ${SRCDIR}
+	make -s installworld distribution DESTDIR=${CHROOTDIR}
+
+	mkdir -p ${CHROOTDIR}/usr/obj
+}
+
+clone_source() {
+	if [ ! -d ${CHROOTDIR}/usr/src/.git ]; then
+		git clone ${REPO} ${CHROOTDIR}/usr/src
+		cd ${CHROOTDIR}/usr/src
+		branch=$(git branch | grep -F "* " | awk '{print $2;}')
+		if [ ! "${branch}" = "${BRANCH}" ]; then
+			git checkout -b ${BRANCH} origin/${BRANCH}
+		fi
+	else
+		cd ${CHROOTDIR}/usr/src
+		git pull
+	fi
+}
+
+build_source() {
+	debug_print "[*] Building world"
+	chroot ${CHROOTDIR} make \
+		-sj$(sysctl -n hw.ncpu) \
+		-DNO_CLEAN \
+		-C /usr/src \
+		buildworld
+
+	for kernel in $(echo ${KERNELS}); do
+		debug_print "[*] Building kernel ${kernel}"
+		chroot ${CHROOTDIR} make \
+			-sj$(sysctl -n hw.ncpu) \
+			-DNO_CLEAN \
+			-C /usr/src \
+			KERNCONF=${kernel} \
+			buildkernel
+	done
+}
+
+create_src_conf() {
+	if [ -z "${DEBUGBUILD}" ]; then
+		echo "WITHOUT_DEBUG_FILES=1" \
+			>> ${CHROOTDIR}/etc/src.conf
+	fi
+}
+
+prep_release() {
+	chroot ${CHROOTDIR} make -sC /usr/src/release obj clean
+}
+
+build_base_archive() {
+	debug_print "[*] Making base.txz in /usr/src/release"
+	chroot ${CHROOTDIR} make -sC /usr/src/release base.txz
+	mv ${CHROOTDIR}/usr/obj/usr/src/release/base.txz ${STAGEDIR}
+}
+
+build_kernel_archives() {
+	for kernel in $(echo ${KERNELS}); do
+		chroot ${CHROOTDIR} make -sC /usr/src/release \
+			kernel.txz KERNCONF=${kernel}
+		mv ${CHROOTDIR}/usr/obj/usr/src/release/kernel.txz \
+			${STAGEDIR}/kernel-${kernel}.txz
+	done
+}
+
+setup_outputdir() {
+	mkdir -p ${STAGEDIR}
+}
+
+add_extra_files() {
+	cat <<EOF > ${STAGEDIR}/skip.txt
+./etc/group
+./etc/master.passwd
+./etc/newsyslog.conf
+./etc/passwd
+./etc/profile
+./etc/mail/*
+./etc/services
+./etc/shells
+./etc/sysctl.conf
+./etc/ttys
+./root/.profile
+EOF
+
+	cp ${CHROOTDIR}/usr/src/UPDATING ${STAGEDIR}/
+	cp ${CHROOTDIR}/usr/src/UPDATING-HardenedBSD ${STAGEDIR}
+}
+
+sign_artifacts() {
+	if [ -z "${PRIVKEY}" ]; then
+		return 0
+	else
+		if [ ! -f ${PRIVKEY} ]; then
+			return 1
+		fi
+	fi
+
+	for file in $(find ${STAGEDIR} -name \*.txz); do
+		sha512 -q ${file} | openssl rsautl \
+			-sign \
+			-inkey ${PRIVKEY} \
+			-out ${file}.sig
+	done
+
+	sha512 -q ${STAGEDIR}/skip.txt | openssl rsautl \
+		-sign \
+		-inkey ${PRIVKEY} \
+		-out ${STAGEDIR}/skip.txt.sig
+
+	if [ -f ${PUBKEY} ]; then
+		cp ${PUBKEY} ${STAGEDIR}/pubkey.pem
+	fi
+}
+
+git_version() {
+	cd /usr/src
+	git log -n 1 --format=format:o%H
+}
+
+build_update_archive() {
+	ver=$(git_version)
+
+	cd ${STAGEDIR}
+	tar -cf ${OUTPUTDIR}/update-${ver}.tar .
+}
+
+sanity_check() {
+	if [ $(id -u) -gt 0 ]; then
+		echo "ERROR: ${0} must be run as root." >&2
+		exit 1
+	fi
+
+	if [ ! -d ${STAGEDIR} ]; then
+		mkdir -p ${STAGEDIR}
+	fi
+
+	if [ ! -d ${OUTPUTDIR} ]; then
+		mkdir -p ${STAGEDIR}
+	fi
+}
+
+main() {
+	set -e
+	sanity_check
+	setup_environment
+	while getopts 'c:h' opt; do
+		case ${opt} in
+			c)
+				BUILDCONF="${OPTARG}"
+				;;
+			*)
+				usage
+				;;
+		esac
+	done
+
+	if [ ! -z "${BUILDCONF}" ]; then
+		. ${BUILDCONF}
+	fi
+
+	cleanup_chroot
+	setup_chroot
+	setup_outputdir
+	clone_source
+	create_src_conf
+	build_source
+
+	prep_release
+	build_base_archive
+	build_kernel_archives
+	add_extra_files
+	sign_artifacts
+	build_update_archive
+}
+
+main "${@}"
