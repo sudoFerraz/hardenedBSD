@@ -32,6 +32,8 @@
 #	1) git
 #	2) OpenSSL
 
+success=0
+
 debug_print() {
 	echo ${1} >&2
 }
@@ -52,6 +54,7 @@ setup_environment() {
 	STAGEDIR="/builds/updater/stage/$(date '+%F_%T')"
 	OUTPUTDIR="/builds/updater/output"
 	CHROOTDIR="/builds/updater/chroot"
+	LOGDIR="/builds/updater/logs"
 	FULLCLEAN="no"
 }
 
@@ -81,22 +84,43 @@ setup_chroot() {
 
 	cd ${SRCDIR}
 	make -s installworld distribution DESTDIR=${CHROOTDIR}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
 
 	mkdir -p ${CHROOTDIR}/usr/obj
+
+	return 0
 }
 
 clone_source() {
 	if [ ! -d ${CHROOTDIR}/usr/src/.git ]; then
 		git clone ${REPO} ${CHROOTDIR}/usr/src
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			return ${res}
+		fi
+
 		cd ${CHROOTDIR}/usr/src
 		branch=$(git branch | grep -F "* " | awk '{print $2;}')
 		if [ ! "${branch}" = "${BRANCH}" ]; then
 			git checkout -b ${BRANCH} origin/${BRANCH}
+			res=${?}
+			if [ ${res} -gt 0 ]; then
+				return ${res}
+			fi
 		fi
 	else
 		cd ${CHROOTDIR}/usr/src
 		git pull
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			return ${res}
+		fi
 	fi
+
+	return 0
 }
 
 build_source() {
@@ -107,15 +131,27 @@ build_source() {
 		-C /usr/src \
 		buildworld
 
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
 	for kernel in $(echo ${KERNELS}); do
 		debug_print "[*] Building kernel ${kernel}"
 		chroot ${CHROOTDIR} make \
 			-sj$(sysctl -n hw.ncpu) \
-			-DNO_CLEAN \
+			-DNO_KERNELCLEAN \
 			-C /usr/src \
 			KERNCONF=${kernel} \
 			buildkernel
+
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			return ${res}
+		fi
 	done
+
+	return 0
 }
 
 create_src_conf() {
@@ -127,26 +163,51 @@ create_src_conf() {
 
 prep_release() {
 	chroot ${CHROOTDIR} make -sC /usr/src/release obj clean
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
+	return ${res}
 }
 
 build_base_archive() {
 	debug_print "[*] Making base.txz in /usr/src/release"
 	chroot ${CHROOTDIR} make -sC /usr/src/release base.txz
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
 	mv ${CHROOTDIR}/usr/obj/usr/src/release/base.txz ${STAGEDIR}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
 }
 
 build_kernel_archives() {
 	for kernel in $(echo ${KERNELS}); do
 		chroot ${CHROOTDIR} make -sC /usr/src/release \
 			kernel.txz KERNCONF=${kernel}
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			return ${res}
+		fi
+
 		mv ${CHROOTDIR}/usr/obj/usr/src/release/kernel.txz \
 			${STAGEDIR}/kernel-${kernel}.txz
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			return ${res}
+		fi
 	done
 }
 
 setup_directories() {
 	mkdir -p ${STAGEDIR}
 	mkdir -p ${OUTPUTDIR}
+	mkdir -p ${LOGDIR}
 }
 
 add_extra_files() {
@@ -165,7 +226,7 @@ add_extra_files() {
 EOF
 
 	cp ${CHROOTDIR}/usr/src/UPDATING ${STAGEDIR}/
-	cp ${CHROOTDIR}/usr/src/UPDATING-HardenedBSD ${STAGEDIR}
+	cp ${CHROOTDIR}/usr/src/UPDATING-HardenedBSD ${STAGEDIR}/
 }
 
 sign_artifacts() {
@@ -205,11 +266,16 @@ hbsd_version() {
 		awk '{print $3;}'
 }
 
+full_version() {
+	echo "hbsd-v$(hbsd_version)-$(git_version)"
+}
+
 build_update_archive() {
-	ver="hbsd-v$(hbsd_version)-$(git_version)"
+	ver=$(full_version)
 
 	cd ${STAGEDIR}
 	tar -cf ${OUTPUTDIR}/update-${ver}.tar .
+	return ${?}
 }
 
 sanity_check() {
@@ -225,6 +291,10 @@ sanity_check() {
 	if [ ! -d ${OUTPUTDIR} ]; then
 		mkdir -p ${STAGEDIR}
 	fi
+}
+
+log_build() {
+	cat > ${LOGDIR}/$(date '+%F_%T').log
 }
 
 main() {
@@ -246,19 +316,30 @@ main() {
 		. ${BUILDCONF}
 	fi
 
-	cleanup_chroot
-	setup_chroot
-	setup_directories
-	clone_source
-	create_src_conf
-	build_source
+	setup_directories || exit 1
 
-	prep_release
-	build_base_archive
-	build_kernel_archives
-	add_extra_files
-	sign_artifacts
-	build_update_archive
+	(
+		cleanup_chroot || exit 1
+		setup_chroot || exit 1
+		clone_source || exit 1
+		create_src_conf || exit 1
+		build_source || exit 1
+
+		prep_release || exit 1
+		build_base_archive || exit 1
+		build_kernel_archives || exit 1
+		add_extra_files || exit 1
+		sign_artifacts || exit 1
+		build_update_archive || exit 1
+		success=1
+		exit 0
+	) 2>&1 | log_build
+
+	if [ ${success} -eq 1 ]; then
+		echo "OK $(date '+%s')|$(full_version)"
+	else
+		echo "FAIL"
+	fi
 }
 
 main "${@}"
