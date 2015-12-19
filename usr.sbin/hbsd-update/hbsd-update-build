@@ -32,8 +32,6 @@
 #	1) git
 #	2) OpenSSL
 
-success=0
-
 debug_print() {
 	echo ${1} >&2
 }
@@ -51,7 +49,7 @@ setup_environment() {
 	SIGNBIN="/usr/bin/openssl"
 	KERNELS="HARDENEDBSD"
 	SRCDIR="/usr/src"
-	STAGEDIR="/builds/updater/stage/$(date '+%F_%T')"
+	STAGEDIR="/builds/updater/stage"
 	OUTPUTDIR="/builds/updater/output"
 	CHROOTDIR="/builds/updater/chroot"
 	LOGDIR="/builds/updater/logs"
@@ -71,6 +69,15 @@ cleanup_chroot() {
 		chflags -R noschg ${CHROOTDIR}
 		rm -rf ${CHROOTDIR}
 	fi
+}
+
+setup_directories() {
+	rm -rf ${STAGEDIR} || true # Don't care if this fails
+	mkdir -p ${STAGEDIR}
+	mkdir -p ${OUTPUTDIR}
+	mkdir -p ${LOGDIR}
+
+	touch ${STAGEDIR}/lock
 }
 
 setup_chroot() {
@@ -204,12 +211,6 @@ build_kernel_archives() {
 	done
 }
 
-setup_directories() {
-	mkdir -p ${STAGEDIR}
-	mkdir -p ${OUTPUTDIR}
-	mkdir -p ${LOGDIR}
-}
-
 add_extra_files() {
 	cat <<EOF > ${STAGEDIR}/skip.txt
 ./etc/group
@@ -274,7 +275,10 @@ build_update_archive() {
 	ver=$(full_version)
 
 	cd ${STAGEDIR}
-	tar -cf ${OUTPUTDIR}/update-${ver}.tar .
+	tar -cf ${OUTPUTDIR}/update-${ver}.tar \
+		--exclude ./lock \
+		.
+
 	return ${?}
 }
 
@@ -284,23 +288,23 @@ sanity_check() {
 		exit 1
 	fi
 
-	if [ ! -d ${STAGEDIR} ]; then
-		mkdir -p ${STAGEDIR}
-	fi
-
-	if [ ! -d ${OUTPUTDIR} ]; then
-		mkdir -p ${STAGEDIR}
+	if [ -f ${STAGEDIR}/lock ]; then
+		echo "ERROR: ${0} is already running." >&2
+		echo "       If you feel this is in error, remove the lockfile at ${STAGEDIR}/lock" >&2
+		exit 1
 	fi
 }
 
 log_build() {
-	cat > ${LOGDIR}/$(date '+%F_%T').log
+	logfile=$(date '+%F_%T')
+	debug_print "Log: ${LOGDIR}/${logfile}.log"
+	cat > ${LOGDIR}/${logfile}.log
 }
 
 main() {
 	set -e
-	sanity_check
 	setup_environment
+	sanity_check
 	while getopts 'c:h' opt; do
 		case ${opt} in
 			c)
@@ -331,15 +335,17 @@ main() {
 		add_extra_files || exit 1
 		sign_artifacts || exit 1
 		build_update_archive || exit 1
-		success=1
+		touch ${STAGEDIR}/success
 		exit 0
 	) 2>&1 | log_build
 
-	if [ ${success} -eq 1 ]; then
+	if [ -f ${STAGEDIR}/success ]; then
 		echo "OK $(date '+%s')|$(full_version)"
 	else
 		echo "FAIL"
 	fi
+
+	rm -f ${STAGEDIR}/lock
 }
 
 main "${@}"
