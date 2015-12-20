@@ -1,0 +1,226 @@
+#!/bin/sh
+#-
+# Copyright (c) 2015 HardenedBSD
+# Author: Shawn Webb <shawn.webb@hardenedbsd.org>
+#
+# This work originally sponsored by G2, Inc
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+
+tmpdir=""
+buildver=""
+zfsbe=""
+capath="/usr/share/keys/hbsd-update/trusted"
+baseurl="file:///builds/updater/output"
+kernel="HARDENEDBSD"
+
+debug_print() {
+	echo ${1} >&2
+}
+
+usage() {
+	debug_print "USAGE: ${0} [-b zfsbe] [-c capath] [-k kernel] [-t tmpdir] [-u url] [-v version]"
+	exit 1
+}
+
+get_tmpdir() {
+	if [ -z "${tmpdir}" ]; then
+		tmpdir=$(mktemp -d)
+		debug_print "[*] Tempdir: ${tmpdir}"
+	fi
+
+	echo ${tmpdir}
+}
+
+get_version() {
+	# TODO do DNS logic
+	if [ ! -z "${buildver}" ]; then
+		echo ${buildver}
+		return 0
+	fi
+
+	return 1
+}
+
+fetch_update() {
+	fetch -o ${tmpdir}/update.tar \
+		${baseurl}/update-hbsd-$(get_version).tar
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
+	tar -xf ${tmpdir}/update.tar \
+		-C ${tmpdir}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
+	return 0
+}
+
+check_pubkey_validity() {
+	caopt="-CApath"
+	if [ -f ${capath} ]; then
+		caopt="-CAfile"
+	fi
+
+	openssl verify \
+		${caopt} ${capath} \
+		${tmpdir}/pubkey.pem \
+		> /dev/null 2>&1
+	return ${res}
+}
+
+check_set_validity() {
+	checkfiles="base.txz kernel-${kernel}.txz skip.txt"
+
+	openssl x509 \
+		-in ${tmpdir}/pubkey.pem \
+		-pubkey \
+		-noout \
+		> ${tmpdir}/pubkey.rsa.pem
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		debug_print "[-] Could not extract public key"
+		return 1
+	fi
+
+	for file in $(echo ${checkfiles}); do
+		signedhash=$(openssl rsautl \
+			-verify \
+			-in ${tmpdir}/${file}.sig \
+			-pubin \
+			-inkey ${tmpdir}/pubkey.rsa.pem)
+
+		computedhash=$(sha512 -q ${tmpdir}/${file})
+		if [ ! "${signedhash}" = "${computedhash}" ]; then
+			debug_print "[-] Hashes don't match for ${file}. Signed: ${signedhash}. Computed ${computedhash}."
+			return 1
+		fi
+	done
+
+	return 0
+}
+
+apply_base() {
+	chflags -R noschg \
+		/bin \
+		/sbin \
+		/lib \
+		/libexec \
+		/usr/bin \
+		/usr/sbin \
+		/usr/lib
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
+	tar -xpf ${tmpdir}/base.txz \
+		-X ${tmpdir}/skip.txt \
+		-C /
+}
+
+apply_kernel() {
+	tar -xpf ${tmpdir}/kernel-${kernel}.txz \
+		-X ${tmpdir}/skip.txt \
+		-C /
+	kldxref /boot/kernel
+	return ${?}
+}
+
+cleanup() {
+	rm -rf ${tmpdir}
+}
+
+main() {
+	while getopts 'b:k:t:u:v:' opt; do
+		case "${opt}" in
+			b)
+				zfsbe="${OPTARG}"
+				;;
+			c)
+				capath="${OPTARG}"
+				;;
+			k)
+				kernel="${OPTARG}"
+				;;
+			t)
+				tmpdir="${OPTARG}"
+				;;
+			u)
+				baseurl="${OPTARG}"
+				;;
+			v)
+				buildver="${OPTARG}"
+				;;
+		esac
+	done
+
+	if [ -z "${tmpdir}" ]; then
+		get_tmpdir
+	fi
+
+	fetch_update
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		cleanup
+		exit 1
+	fi
+
+	check_pubkey_validity
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		cleanup
+		debug_print "[*] Public key failed to validate."
+		exit 1
+	fi
+
+	check_set_validity
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		cleanup
+		debug_print "[*] Public key failed to validate."
+		exit 1
+	fi
+
+	apply_base
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		cleanup
+		exit 1
+	fi
+
+	apply_kernel
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		cleanup
+		exit 1
+	fi
+
+	cleanup
+	exit 0
+}
+
+main "${@}"
