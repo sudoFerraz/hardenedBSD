@@ -164,7 +164,7 @@ build_source() {
 create_src_conf() {
 	if [ -z "${DEBUGBUILD}" ]; then
 		echo "WITHOUT_DEBUG_FILES=1" \
-			>> ${CHROOTDIR}/etc/src.conf
+			> ${CHROOTDIR}/etc/src.conf
 	fi
 }
 
