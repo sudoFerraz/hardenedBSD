@@ -216,16 +216,21 @@ build_kernel_archives() {
 add_extra_files() {
 	cat <<EOF > ${STAGEDIR}/skip.txt
 ./etc/group
+./etc/login.conf
+./etc/login.conf.db
 ./etc/master.passwd
 ./etc/newsyslog.conf
 ./etc/passwd
+./etc/pwd.db
 ./etc/profile
 ./etc/mail/*
 ./etc/services
 ./etc/shells
+./etc/spwd.db
 ./etc/sysctl.conf
 ./etc/ttys
 ./root/.profile
+./var/empty
 EOF
 
 	cp ${CHROOTDIR}/usr/src/UPDATING ${STAGEDIR}/
