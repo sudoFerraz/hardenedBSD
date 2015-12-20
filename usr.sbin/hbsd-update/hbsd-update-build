@@ -54,6 +54,7 @@ setup_environment() {
 	CHROOTDIR="/builds/updater/chroot"
 	LOGDIR="/builds/updater/logs"
 	FULLCLEAN="no"
+	DEVMODE="yes" # set to empty instead of "no"
 }
 
 cleanup_chroot() {
@@ -133,9 +134,9 @@ clone_source() {
 build_source() {
 	debug_print "[*] Building world"
 	chroot ${CHROOTDIR} make \
-		-sj$(sysctl -n hw.ncpu) \
-		-DNO_CLEAN \
 		-C /usr/src \
+		-sj$(sysctl -n hw.ncpu) \
+		$(echo ${DEVMODE} | sed 's/yes/-DNO_CLEAN/') \
 		buildworld
 
 	res=${?}
@@ -146,10 +147,11 @@ build_source() {
 	for kernel in $(echo ${KERNELS}); do
 		debug_print "[*] Building kernel ${kernel}"
 		chroot ${CHROOTDIR} make \
-			-sj$(sysctl -n hw.ncpu) \
-			-DNO_KERNELCLEAN \
 			-C /usr/src \
 			KERNCONF=${kernel} \
+			-sj$(sysctl -n hw.ncpu) \
+			$(echo ${DEVMODE} | \
+				sed 's/yes/-DNO_KERNELCLEAN/') \
 			buildkernel
 
 		res=${?}
