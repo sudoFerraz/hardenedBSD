@@ -33,6 +33,7 @@ dnsrec="$(uname -m).$(uname -r).updates.hardenedbsd.dev"
 capath="/usr/share/keys/hbsd-update/trusted"
 baseurl="http://updates.hardenedbsd.dev/$(uname -r)/$(uname -m)"
 kernel="HARDENEDBSD"
+verbose=0
 
 debug_print() {
 	echo -e "${1}" >&2
@@ -50,6 +51,7 @@ usage() {
 	debug_print "\t-u url\t\tFetch update from a different URL"
 	debug_print "\t-U\t\tAllow unsigned updates"
 	debug_print "\t-v version\tUse a different version"
+	debug_print "\t-V\t\tVerbose output"
 	exit 1
 }
 
@@ -77,6 +79,10 @@ get_version() {
 	fi
 
 	echo ${buildver}
+
+	if [ ${verbose} -gt 0 ]; then
+		debug_print "[*] Latest build: ${buildver}"
+	fi
 
 	return 0
 }
@@ -175,7 +181,7 @@ cleanup() {
 }
 
 main() {
-	while getopts 'hUb:j:k:t:u:v:' opt; do
+	while getopts 'hUVb:j:k:t:u:v:' opt; do
 		case "${opt}" in
 			b)
 				debug_print "Installing to a boot environment is not supported, yet."
@@ -203,6 +209,9 @@ main() {
 			v)
 				buildver="${OPTARG}"
 				;;
+			V)
+				verbose=1
+				;;
 			*)
 				usage
 				;;
@@ -210,11 +219,11 @@ main() {
 	done
 
 	if [ -z "${tmpdir}" ]; then
-		get_tmpdir
+		get_tmpdir > /dev/null
 	fi
 
 	if [ -z "${buildver}" ]; then
-		get_version
+		get_version > /dev/null
 		res=${?}
 		if [ ${res} -gt 0 ]; then
 			debug_print "[*] Could not get the version number"
