@@ -33,6 +33,7 @@ dnsrec="$(uname -m).$(uname -r).updates.hardenedbsd.dev"
 capath="/usr/share/keys/hbsd-update/trusted"
 baseurl="http://updates.hardenedbsd.dev/$(uname -r)/$(uname -m)"
 kernel="HARDENEDBSD"
+unsigned=0
 verbose=0
 
 debug_print() {
@@ -255,20 +256,22 @@ main() {
 		exit 1
 	fi
 
-	check_pubkey_validity
-	res=${?}
-	if [ ${res} -gt 0 ]; then
-		cleanup
-		debug_print "[*] Public key failed to validate."
-		exit 1
-	fi
+	if [ ${unsigned} -eq 0 ]; then
+		check_pubkey_validity
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			cleanup
+			debug_print "[*] Public key failed to validate."
+			exit 1
+		fi
 
-	check_set_validity
-	res=${?}
-	if [ ${res} -gt 0 ]; then
-		cleanup
-		debug_print "[*] Public key failed to validate."
-		exit 1
+		check_set_validity
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			cleanup
+			debug_print "[*] Public key failed to validate."
+			exit 1
+		fi
 	fi
 
 	apply_base
