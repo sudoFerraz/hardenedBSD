@@ -106,6 +106,10 @@ fetch_update() {
 }
 
 check_pubkey_validity() {
+	if [ ${verbose} -gt 0 ]; then
+		debug_print "[*] Checking validity of the public key"
+	fi
+
 	caopt="-CApath"
 	if [ -f ${capath} ]; then
 		caopt="-CAfile"
@@ -133,6 +137,10 @@ check_set_validity() {
 	fi
 
 	for file in $(echo ${checkfiles}); do
+		if [ ${verbose} -gt 0 ]; then
+			debug_print "[*] Checking the validity of ${file}"
+		fi
+
 		signedhash=$(openssl rsautl \
 			-verify \
 			-in ${tmpdir}/${file}.sig \
@@ -150,6 +158,10 @@ check_set_validity() {
 }
 
 apply_base() {
+	if [ ${verbose} -gt 0 ]; then
+		debug_print "[*] Applying base"
+	fi
+
 	chflags -R noschg \
 		/bin \
 		/sbin \
@@ -169,6 +181,10 @@ apply_base() {
 }
 
 apply_kernel() {
+	if [ ${verbose} -gt 0 ]; then
+		debug_print "[*] Applying kernel ${kernel}"
+	fi
+
 	tar -xpf ${tmpdir}/kernel-${kernel}.txz \
 		-X ${tmpdir}/skip.txt \
 		-C /
