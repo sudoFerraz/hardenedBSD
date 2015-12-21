@@ -46,6 +46,7 @@ usage() {
 	debug_print "OPTIONS:"
 	debug_print "\t-b BEname\tInstall updates to ZFS Boot Environment <BEname>"
 	debug_print "\t-c CApath\tPath (file or directory) to the CA cert(s)"
+	debug_print "\t-d dnsrec\tDNS record name to use for checking version info"
 	debug_print "\t-h\t\tShow this help screen"
 	debug_print "\t-j jailname\tInstall updates to jail <jailname>"
 	debug_print "\t-k kernel\tUse different kernel (default: HARDENEDBSD)"
@@ -240,7 +241,7 @@ cleanup() {
 }
 
 main() {
-	while getopts 'hUVb:j:k:t:u:v:' opt; do
+	while getopts 'hUVb:d:j:k:t:u:v:' opt; do
 		case "${opt}" in
 			b)
 				zfsbe="${OPTARG}"
@@ -248,6 +249,9 @@ main() {
 				;;
 			c)
 				capath="${OPTARG}"
+				;;
+			d)
+				dnsrec="${OPTARG}"
 				;;
 			j)
 				debug_print "Installing to a jail is not supported, yet."
