@@ -29,41 +29,61 @@
 tmpdir=""
 buildver=""
 zfsbe=""
+dnsrec="$(uname -m).$(uname -r).updates.hardenedbsd.dev"
 capath="/usr/share/keys/hbsd-update/trusted"
-baseurl="file:///builds/updater/output"
+baseurl="http://updates.hardenedbsd.dev/$(uname -r)/$(uname -m)"
 kernel="HARDENEDBSD"
 
 debug_print() {
-	echo ${1} >&2
+	echo -e "${1}" >&2
 }
 
 usage() {
-	debug_print "USAGE: ${0} [-b zfsbe] [-c capath] [-k kernel] [-t tmpdir] [-u url] [-v version]"
+	debug_print "USAGE: ${0} OPTIONS"
+	debug_print "OPTIONS:"
+	debug_print "\t-b BEname\tInstall updates to ZFS Boot Environment <BEname>"
+	debug_print "\t-c CApath\tPath (file or directory) to the CA cert(s)"
+	debug_print "\t-h\t\tShow this help screen"
+	debug_print "\t-j jailname\tInstall updates to jail <jailname>"
+	debug_print "\t-k kernel\tUse different kernel (default: HARDENEDBSD)"
+	debug_print "\t-t tmpdir\tTemporary directory"
+	debug_print "\t-u url\t\tFetch update from a different URL"
+	debug_print "\t-U\t\tAllow unsigned updates"
+	debug_print "\t-v version\tUse a different version"
 	exit 1
 }
 
 get_tmpdir() {
 	if [ -z "${tmpdir}" ]; then
 		tmpdir=$(mktemp -d)
-		debug_print "[*] Tempdir: ${tmpdir}"
 	fi
 
 	echo ${tmpdir}
 }
 
 get_version() {
-	# TODO do DNS logic
 	if [ ! -z "${buildver}" ]; then
 		echo ${buildver}
 		return 0
 	fi
 
-	return 1
+	res=$(host -t txt ${dnsrec} | \
+		awk '{print $4;}' | \
+		sed 's,",,g')
+
+	buildver=$(echo ${res} | sed 's,|, ,g' | awk '{print $2;}')
+	if [ -z "${buildver}" ]; then
+		return 1
+	fi
+
+	echo ${buildver}
+
+	return 0
 }
 
 fetch_update() {
 	fetch -o ${tmpdir}/update.tar \
-		${baseurl}/update-hbsd-$(get_version).tar
+		${baseurl}/update-$(get_version).tar
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		return ${res}
@@ -155,13 +175,18 @@ cleanup() {
 }
 
 main() {
-	while getopts 'b:k:t:u:v:' opt; do
+	while getopts 'hUb:j:k:t:u:v:' opt; do
 		case "${opt}" in
 			b)
-				zfsbe="${OPTARG}"
+				debug_print "Installing to a boot environment is not supported, yet."
+				exit 1
 				;;
 			c)
 				capath="${OPTARG}"
+				;;
+			j)
+				debug_print "Installing to a jail is not supported, yet."
+				exit 1
 				;;
 			k)
 				kernel="${OPTARG}"
@@ -172,14 +197,30 @@ main() {
 			u)
 				baseurl="${OPTARG}"
 				;;
+			U)
+				unsigned=1
+				;;
 			v)
 				buildver="${OPTARG}"
+				;;
+			*)
+				usage
 				;;
 		esac
 	done
 
 	if [ -z "${tmpdir}" ]; then
 		get_tmpdir
+	fi
+
+	if [ -z "${buildver}" ]; then
+		get_version
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			debug_print "[*] Could not get the version number"
+			cleanup
+			exit 1
+		fi
 	fi
 
 	fetch_update
