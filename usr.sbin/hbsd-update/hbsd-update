@@ -29,7 +29,8 @@
 tmpdir=""
 buildver=""
 zfsbe=""
-dnsrec="$(uname -m).$(uname -r).updates.hardenedbsd.dev"
+mountpoint="/"
+dnsrec="$(uname -m).$(uname -r).updates.hardenedbsd.org"
 capath="/usr/share/keys/hbsd-update/trusted"
 baseurl="http://updates.hardenedbsd.dev/$(uname -r)/$(uname -m)"
 kernel="HARDENEDBSD"
@@ -178,7 +179,7 @@ apply_base() {
 
 	tar -xpf ${tmpdir}/base.txz \
 		-X ${tmpdir}/skip.txt \
-		-C /
+		-C ${mountpoint}
 }
 
 apply_kernel() {
@@ -188,9 +189,50 @@ apply_kernel() {
 
 	tar -xpf ${tmpdir}/kernel-${kernel}.txz \
 		-X ${tmpdir}/skip.txt \
-		-C /
+		-C ${mountpoint}
 	kldxref /boot/kernel
 	return ${?}
+}
+
+create_be() {
+	if [ -z "${zfsbe}" ]; then
+		return 0
+	fi
+
+	beadm create ${zfsbe}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
+	mountpoint=$(mktemp -d)
+	beadm mount ${zfsbe} ${mountpoint}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
+	return 0
+}
+
+activate_be() {
+	if [ -z "${zfsbe}" ]; then
+		return 0
+	fi
+
+	beadm umount ${zfsbe}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
+	beadm activate ${zfsbe}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
+	return 0
 }
 
 cleanup() {
@@ -201,7 +243,7 @@ main() {
 	while getopts 'hUVb:j:k:t:u:v:' opt; do
 		case "${opt}" in
 			b)
-				debug_print "Installing to a boot environment is not supported, yet."
+				zfsbe="${OPTARG}"
 				exit 1
 				;;
 			c)
@@ -274,6 +316,13 @@ main() {
 		fi
 	fi
 
+	create_be
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		cleanup
+		exit 1
+	fi
+
 	apply_base
 	res=${?}
 	if [ ${res} -gt 0 ]; then
@@ -282,6 +331,13 @@ main() {
 	fi
 
 	apply_kernel
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		cleanup
+		exit 1
+	fi
+
+	activate_be
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		cleanup
