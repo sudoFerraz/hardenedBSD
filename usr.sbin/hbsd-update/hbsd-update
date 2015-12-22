@@ -32,7 +32,8 @@ zfsbe=""
 mountpoint="/"
 dnsrec="$(uname -m).$(uname -r).updates.hardenedbsd.org"
 capath="/usr/share/keys/hbsd-update/trusted"
-baseurl="http://updates.hardenedbsd.dev/$(uname -r)/$(uname -m)"
+branch="hardened_current_master"
+baseurl=""
 kernel="HARDENEDBSD"
 unsigned=0
 verbose=0
@@ -45,6 +46,7 @@ usage() {
 	debug_print "USAGE: ${0} OPTIONS"
 	debug_print "OPTIONS:"
 	debug_print "\t-b BEname\tInstall updates to ZFS Boot Environment <BEname>"
+	debug_print "\t-B branch\tBranch to use with the base URL"
 	debug_print "\t-c CApath\tPath (file or directory) to the CA cert(s)"
 	debug_print "\t-d dnsrec\tDNS record name to use for checking version info"
 	debug_print "\t-h\t\tShow this help screen"
@@ -58,12 +60,27 @@ usage() {
 	exit 1
 }
 
+get_baseurl() {
+	if [ ! -z "${baseurl}" ]; then
+		echo ${baseurl}
+		return 0
+	fi
+
+	baseurl="http://updates.hardenedbsd.org/pub/updates/${branch}/$(uname -r)/$(uname -m)"
+
+	echo ${baseurl}
+
+	return 0
+}
+
 get_tmpdir() {
 	if [ -z "${tmpdir}" ]; then
 		tmpdir=$(mktemp -d)
 	fi
 
 	echo ${tmpdir}
+
+	return 0
 }
 
 get_version() {
@@ -241,11 +258,14 @@ cleanup() {
 }
 
 main() {
-	while getopts 'hUVb:d:j:k:t:u:v:' opt; do
+	while getopts 'hUVb:B:d:j:k:t:u:v:' opt; do
 		case "${opt}" in
 			b)
 				zfsbe="${OPTARG}"
 				exit 1
+				;;
+			B)
+				branch="${OPTARG}"
 				;;
 			c)
 				capath="${OPTARG}"
