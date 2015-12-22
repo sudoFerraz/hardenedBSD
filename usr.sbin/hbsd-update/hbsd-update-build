@@ -55,6 +55,8 @@ setup_environment() {
 	LOGDIR="/builds/updater/logs"
 	FULLCLEAN="no"
 	DEVMODE="yes" # set to empty instead of "no"
+	SRCCONFPATH=""
+	DEBUGBUILD=""
 }
 
 cleanup_chroot() {
@@ -164,9 +166,13 @@ build_source() {
 }
 
 create_src_conf() {
-	if [ -z "${DEBUGBUILD}" ]; then
-		echo "WITHOUT_DEBUG_FILES=1" \
-			> ${CHROOTDIR}/etc/src.conf
+	if [ -z "${SRCCONFPATH}" ]; then
+		if [ ! -z "${DEBUGBUILD}" ]; then
+			echo "WITHOUT_DEBUG_FILES=1" \
+				> ${CHROOTDIR}/etc/src.conf
+		fi
+	else
+		cp ${SRCCONFPATH} ${CHROOTDIR}/etc/src.conf
 	fi
 }
 
