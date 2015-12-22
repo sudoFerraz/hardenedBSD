@@ -314,6 +314,13 @@ main() {
 			exit 1
 		fi
 	fi
+	get_baseurl > /dev/null
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		debug_print "[*] Could not get the version number"
+		cleanup
+		exit 1
+	fi
 
 	fetch_update
 	res=${?}
