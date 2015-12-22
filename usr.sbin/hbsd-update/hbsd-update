@@ -261,6 +261,11 @@ main() {
 	while getopts 'hUVb:B:d:j:k:t:u:v:' opt; do
 		case "${opt}" in
 			b)
+				if ! which -s beadm; then
+					debug_print "[*] Please install the beadm pkg."
+					exit 1
+				fi
+
 				zfsbe="${OPTARG}"
 				exit 1
 				;;
