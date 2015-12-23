@@ -85,17 +85,29 @@ get_tmpdir() {
 
 get_version() {
 	if [ ! -z "${buildver}" ]; then
+		# User-specified version
 		echo ${buildver}
 		return 0
 	fi
 
-	res=$(host -t txt ${dnsrec} | \
-		awk '{print $4;}' | \
-		sed 's,",,g')
+	if [ ! -z "${dnsrec}" ]; then
+		# Prefer DNS, fallback to HTTP
+		res=$(drill ${dnsrec} txt | \
+			grep -F TXT | \
+			grep -vF ';;' | \
+			awk '{print $5;}' | \
+			sed 's,",,g')
+		buildver=$(echo ${res} | sed 's,|, ,g' | awk '{print $2;}')
+	fi
 
-	buildver=$(echo ${res} | sed 's,|, ,g' | awk '{print $2;}')
 	if [ -z "${buildver}" ]; then
-		return 1
+		# Attempt to grab the version from HTTP
+		buildver=$(curl ${baseurl}/update-latest.txt | \
+			sed 's,|, ,g' | \
+			awk '{print $2;}')
+		if [ -z "${buildver}" ]; then
+			return 1
+		fi
 	fi
 
 	echo ${buildver}
@@ -319,6 +331,14 @@ main() {
 		get_tmpdir > /dev/null
 	fi
 
+	get_baseurl > /dev/null
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		debug_print "[*] Could not get the base URL"
+		cleanup
+		exit 1
+	fi
+
 	if [ -z "${buildver}" ]; then
 		get_version > /dev/null
 		res=${?}
@@ -327,13 +347,6 @@ main() {
 			cleanup
 			exit 1
 		fi
-	fi
-	get_baseurl > /dev/null
-	res=${?}
-	if [ ${res} -gt 0 ]; then
-		debug_print "[*] Could not get the version number"
-		cleanup
-		exit 1
 	fi
 
 	fetch_update
