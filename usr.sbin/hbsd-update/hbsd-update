@@ -183,13 +183,13 @@ apply_base() {
 	fi
 
 	chflags -R noschg \
-		/bin \
-		/sbin \
-		/lib \
-		/libexec \
-		/usr/bin \
-		/usr/sbin \
-		/usr/lib
+		${mountpoint}/bin \
+		${mountpoint}/sbin \
+		${mountpoint}/lib \
+		${mountpoint}/libexec \
+		${mountpoint}/usr/bin \
+		${mountpoint}/usr/sbin \
+		${mountpoint}/usr/lib
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		return ${res}
@@ -253,6 +253,16 @@ activate_be() {
 	return 0
 }
 
+destroy_be() {
+	if [ -z "${zfsbe}" ]; then
+		return 0
+	fi
+
+	beadm umount ${zfsbe}
+	beadm destroy -F ${zfsbe}
+	return ${?}
+}
+
 cleanup() {
 	rm -rf ${tmpdir}
 }
@@ -267,7 +277,6 @@ main() {
 				fi
 
 				zfsbe="${OPTARG}"
-				exit 1
 				;;
 			B)
 				branch="${OPTARG}"
@@ -356,6 +365,7 @@ main() {
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		cleanup
+		destroy_be
 		exit 1
 	fi
 
@@ -363,6 +373,7 @@ main() {
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		cleanup
+		destroy_be
 		exit 1
 	fi
 
@@ -370,6 +381,7 @@ main() {
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		cleanup
+		destroy_be
 		exit 1
 	fi
 
@@ -377,6 +389,7 @@ main() {
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		cleanup
+		destroy_be
 		exit 1
 	fi
 
