@@ -1151,7 +1151,6 @@ digest_dynamic1(Obj_Entry *obj, int early, const Elf_Dyn **dyn_rpath,
 
 #ifndef __mips__
 	case DT_DEBUG:
-	    /* XXX - not implemented yet */
 	    if (!early)
 		dbg("Filling in DT_DEBUG entry");
 	    ((Elf_Dyn*)dynp)->d_un.d_ptr = (Elf_Addr) &r_debug;
@@ -1387,22 +1386,22 @@ digest_notes(Obj_Entry *obj, Elf_Addr note_start, Elf_Addr note_end)
 		if (note->n_namesz != sizeof(NOTE_FREEBSD_VENDOR) ||
 		    note->n_descsz != sizeof(int32_t))
 			continue;
-		if (note->n_type != ABI_NOTETYPE &&
-		    note->n_type != CRT_NOINIT_NOTETYPE)
+		if (note->n_type != NT_FREEBSD_ABI_TAG &&
+		    note->n_type != NT_FREEBSD_NOINIT_TAG)
 			continue;
 		note_name = (const char *)(note + 1);
 		if (strncmp(NOTE_FREEBSD_VENDOR, note_name,
 		    sizeof(NOTE_FREEBSD_VENDOR)) != 0)
 			continue;
 		switch (note->n_type) {
-		case ABI_NOTETYPE:
+		case NT_FREEBSD_ABI_TAG:
 			/* FreeBSD osrel note */
 			p = (uintptr_t)(note + 1);
 			p += roundup2(note->n_namesz, sizeof(Elf32_Addr));
 			obj->osrel = *(const int32_t *)(p);
 			dbg("note osrel %d", obj->osrel);
 			break;
-		case CRT_NOINIT_NOTETYPE:
+		case NT_FREEBSD_NOINIT_TAG:
 			/* FreeBSD 'crt does not call init' note */
 			obj->crt_no_init = true;
 			dbg("note crt_no_init");
@@ -4504,7 +4503,7 @@ tls_get_addr_common(Elf_Addr **dtvp, int index, size_t offset)
 }
 
 #if defined(__aarch64__) || defined(__arm__) || defined(__mips__) || \
-    defined(__powerpc__)
+    defined(__powerpc__) || defined(__riscv__)
 
 /*
  * Allocate Static TLS using the Variant I method.
