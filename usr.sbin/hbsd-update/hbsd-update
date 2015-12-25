@@ -151,6 +151,7 @@ check_pubkey_validity() {
 		${caopt} ${capath} \
 		${tmpdir}/pubkey.pem \
 		> /dev/null 2>&1
+	res=${?}
 	return ${res}
 }
 
