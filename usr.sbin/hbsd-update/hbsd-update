@@ -156,7 +156,7 @@ check_pubkey_validity() {
 }
 
 check_set_validity() {
-	checkfiles="base.txz kernel-${kernel}.txz skip.txt"
+	checkfiles="base.txz kernel-${kernel}.txz etcupdate.tbz skip.txt"
 
 	openssl x509 \
 		-in ${tmpdir}/pubkey.pem \
@@ -191,6 +191,8 @@ check_set_validity() {
 }
 
 apply_base() {
+	local needsresolve=0
+
 	if [ ${verbose} -gt 0 ]; then
 		debug_print "[*] Applying base"
 	fi
@@ -211,6 +213,41 @@ apply_base() {
 	tar -xpf ${tmpdir}/base.txz \
 		-X ${tmpdir}/skip.txt \
 		-C ${mountpoint}
+
+	if [ ${verbose} -gt 0 ]; then
+		debug_print "[*] Updating /etc"
+	fi
+
+	etcupdate extract -t ${tmpdir}/etcupdate.tbz
+
+	etcupdate -t ${tmpdir}/etcupdate.tbz \
+	    -D ${mountpoint} \
+	    -I /etc/passwd \
+	    -I /etc/group \
+	    -I /etc/master.passwd \
+	    -I /etc/pwd.db \
+	    -I /etc/spwd.db | while read line; do
+		res=$(echo ${line} | awk '{print $1;}')
+		if [ "${res}" = "C" ]; then
+			needsresolve=1
+		fi
+	done
+
+	while [ ${needsresolve} -gt 0 ]; do
+		debug_print "[*] Manual merges need to be done."
+		etcupdate resolve -D ${mountpoint}
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			return 1
+		fi
+
+		needsresolve=$(etcupdate status -D \
+			${mountpoint} | \
+			wc -l | \
+			awk '{print $1;}')
+	done
+
+	return 0
 }
 
 apply_kernel() {

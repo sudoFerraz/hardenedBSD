@@ -201,6 +201,25 @@ build_base_archive() {
 	fi
 }
 
+build_etcupdate_archive() {
+	debug_print "[*] Making etcupdate archive"
+	chroot ${CHROOTDIR} etcupdate build \
+		-B \
+		/tmp/etcupdate.tbz
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
+	cp ${CHROOTDIR}/tmp/etcupdate.tbz ${STAGEDIR}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
+	return 0
+}
+
 build_kernel_archives() {
 	for kernel in $(echo ${KERNELS}); do
 		chroot ${CHROOTDIR} make -sC /usr/src/release \
@@ -221,20 +240,7 @@ build_kernel_archives() {
 
 add_extra_files() {
 	cat <<EOF > ${STAGEDIR}/skip.txt
-./etc/group
-./etc/login.conf
-./etc/login.conf.db
-./etc/master.passwd
-./etc/newsyslog.conf
-./etc/passwd
-./etc/pwd.db
-./etc/profile
-./etc/mail/*
-./etc/services
-./etc/shells
-./etc/spwd.db
-./etc/sysctl.conf
-./etc/ttys
+./etc
 ./root/.profile
 ./var/empty
 EOF
@@ -252,7 +258,7 @@ sign_artifacts() {
 		fi
 	fi
 
-	for file in $(find ${STAGEDIR} -name \*.txz); do
+	for file in $(find ${STAGEDIR} -name \*.txz -o -name \*.tbz); do
 		sha512 -q ${file} | openssl rsautl \
 			-sign \
 			-inkey ${PRIVKEY} \
@@ -345,6 +351,7 @@ main() {
 		prep_release || exit 1
 		build_base_archive || exit 1
 		build_kernel_archives || exit 1
+		build_etcupdate_archive || exit 1
 		add_extra_files || exit 1
 		sign_artifacts || exit 1
 		build_update_archive || exit 1
