@@ -30,11 +30,7 @@ tmpdir=""
 buildver=""
 zfsbe=""
 mountpoint="/"
-dnsrec="$(uname -m).$(uname -r).updates.hardenedbsd.org"
-capath="/usr/share/keys/hbsd-update/trusted"
-branch="hardened_current_master"
-baseurl=""
-kernel="HARDENEDBSD"
+configfile="/etc/hbsd-update.conf"
 unsigned=0
 verbose=0
 
@@ -46,31 +42,14 @@ usage() {
 	debug_print "USAGE: ${0} OPTIONS"
 	debug_print "OPTIONS:"
 	debug_print "\t-b BEname\tInstall updates to ZFS Boot Environment <BEname>"
-	debug_print "\t-B branch\tBranch to use with the base URL"
-	debug_print "\t-c CApath\tPath (file or directory) to the CA cert(s)"
-	debug_print "\t-d dnsrec\tDNS record name to use for checking version info"
+	debug_print "\t-c config\tUse a non-default config file"
 	debug_print "\t-h\t\tShow this help screen"
 	debug_print "\t-j jailname\tInstall updates to jail <jailname>"
-	debug_print "\t-k kernel\tUse different kernel (default: HARDENEDBSD)"
 	debug_print "\t-t tmpdir\tTemporary directory"
-	debug_print "\t-u url\t\tFetch update from a different URL"
 	debug_print "\t-U\t\tAllow unsigned updates"
 	debug_print "\t-v version\tUse a different version"
 	debug_print "\t-V\t\tVerbose output"
 	exit 1
-}
-
-get_baseurl() {
-	if [ ! -z "${baseurl}" ]; then
-		echo ${baseurl}
-		return 0
-	fi
-
-	baseurl="http://updates.hardenedbsd.org/pub/updates/${branch}/$(uname -r)/$(uname -m)"
-
-	echo ${baseurl}
-
-	return 0
 }
 
 get_tmpdir() {
@@ -317,8 +296,32 @@ cleanup() {
 	rm -rf ${tmpdir}
 }
 
+check_sanity() {
+	if [ ! -f ${configfile} ]; then
+		debug_print "[-] Configuration file missing"
+		exit 1
+	fi
+
+	. ${configfile}
+
+	if [ -z "${baseurl}" ]; then
+		debug_print "[-] Missing setting: baseurl"
+		exit 1
+	fi
+
+	if [ ${unsigned} -eq 0 ] && [ -z "${capath}" ]; then
+		debug_print "[-] Missing setting: capath"
+		exit 1
+	fi
+
+	if [ -z "${kernel}" ]; then
+		debug_print "[-] Missing setting: kernel"
+		exit 1
+	fi
+}
+
 main() {
-	while getopts 'hUVb:B:d:j:k:t:u:v:' opt; do
+	while getopts 'hUVb:c:j:t:u:v:' opt; do
 		case "${opt}" in
 			b)
 				if ! which -s beadm; then
@@ -328,27 +331,15 @@ main() {
 
 				zfsbe="${OPTARG}"
 				;;
-			B)
-				branch="${OPTARG}"
-				;;
 			c)
-				capath="${OPTARG}"
-				;;
-			d)
-				dnsrec="${OPTARG}"
+				configfile="${OPTARG}"
 				;;
 			j)
 				debug_print "Installing to a jail is not supported, yet."
 				exit 1
 				;;
-			k)
-				kernel="${OPTARG}"
-				;;
 			t)
 				tmpdir="${OPTARG}"
-				;;
-			u)
-				baseurl="${OPTARG}"
 				;;
 			U)
 				unsigned=1
@@ -365,16 +356,10 @@ main() {
 		esac
 	done
 
+	check_sanity
+
 	if [ -z "${tmpdir}" ]; then
 		get_tmpdir > /dev/null
-	fi
-
-	get_baseurl > /dev/null
-	res=${?}
-	if [ ${res} -gt 0 ]; then
-		debug_print "[*] Could not get the base URL"
-		cleanup
-		exit 1
 	fi
 
 	if [ -z "${buildver}" ]; then
