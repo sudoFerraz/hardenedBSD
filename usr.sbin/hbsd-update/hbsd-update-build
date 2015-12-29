@@ -37,7 +37,7 @@ debug_print() {
 }
 
 usage() {
-	debug_print "USAGE: ${0} [-c build.conf]"
+	debug_print "USAGE: ${0} [-e] [-c build.conf]"
 	exit 1
 }
 
@@ -57,6 +57,7 @@ setup_environment() {
 	DEVMODE="yes" # set to empty instead of "no"
 	SRCCONFPATH=""
 	DEBUGBUILD=""
+	USE_EXISTING=0
 }
 
 cleanup_chroot() {
@@ -75,7 +76,10 @@ cleanup_chroot() {
 }
 
 setup_directories() {
-	rm -rf ${STAGEDIR} || true # Don't care if this fails
+	if [ ${USE_EXISTING} -eq 0 ]; then
+		rm -rf ${STAGEDIR} || true # Don't care if this fails
+	fi
+
 	mkdir -p ${STAGEDIR}
 	mkdir -p ${OUTPUTDIR}
 	mkdir -p ${LOGDIR}
@@ -259,7 +263,7 @@ sign_artifacts() {
 	fi
 
 	for file in $(find ${STAGEDIR} -name \*.txz -o -name \*.tbz); do
-		sha512 -q ${file} | openssl rsautl \
+		sha512 -q ${file} | ${SIGNBIN} rsautl \
 			-sign \
 			-inkey ${PRIVKEY} \
 			-out ${file}.sig
@@ -296,6 +300,7 @@ build_update_archive() {
 	cd ${STAGEDIR}
 	tar -cf ${OUTPUTDIR}/update-${ver}.tar \
 		--exclude ./lock \
+		--exclude ./success \
 		.
 
 	return ${?}
@@ -314,6 +319,52 @@ sanity_check() {
 	fi
 }
 
+sanity_check_archive() {
+	if [ ! -f ${STAGEDIR}/base.txz ]; then
+		debug_print "[-] Could not find ${STAGEDIR}/base.txz"
+		return 1
+	fi
+
+	if [ ! -f ${STAGEDIR}/base.txz.sig ]; then
+		debug_print "[-] Could not find ${STAGEDIR}/base.txz.sig"
+		return 1
+	fi
+
+	for kernel in ${KERNELS}; do
+		if [ ! -f ${STAGEDIR}/kernel-${kernel}.txz ]; then
+			debug_print "[-] Could not find ${STAGEDIR}/kernel-${kernel}.txz"
+			return 1
+		fi
+
+		if [ ! -f ${STAGEDIR}/kernel-${kernel}.txz.sig ]; then
+			debug_print "[-] Could not find ${STAGEDIR}/kernel-${kernel}.txz.sig"
+			return 1
+		fi
+	done
+
+	if [ ! -f ${STAGEDIR}/etcupdate.tbz ]; then
+		debug_print "[-] Could not find ${STAGEDIR}/etcupdate.tbz"
+		return 1
+	fi
+
+	if [ ! -f ${STAGEDIR}/etcupdate.tbz.sig ]; then
+		debug_print "[-] Could not find ${STAGEDIR}/etcupdate.tbz.sig"
+		return 1
+	fi
+
+	if [ ! -f ${STAGEDIR}/skip.txt ]; then
+		debug_print "[-] Could not find ${STAGEDIR}/skip.txt"
+		return 1
+	fi
+
+	if [ ! -f ${STAGEDIR}/skip.txt.sig ]; then
+		debug_print "[-] Could not find ${STAGEDIR}/skip.txt.sig"
+		return 1
+	fi
+
+	return 0
+}
+
 log_build() {
 	logfile=$(date '+%F_%T')
 	debug_print "Log: ${LOGDIR}/${logfile}.log"
@@ -324,10 +375,13 @@ main() {
 	set -e
 	setup_environment
 	sanity_check
-	while getopts 'c:h' opt; do
+	while getopts 'ec:h' opt; do
 		case ${opt} in
 			c)
 				BUILDCONF="${OPTARG}"
+				;;
+			e)
+				USE_EXISTING=1
 				;;
 			*)
 				usage
@@ -342,18 +396,22 @@ main() {
 	setup_directories || exit 1
 
 	(
-		cleanup_chroot || exit 1
-		setup_chroot || exit 1
-		clone_source || exit 1
-		create_src_conf || exit 1
-		build_source || exit 1
+		if [ ${USE_EXISTING} -eq 0 ]; then
+			cleanup_chroot || exit 1
+			setup_chroot || exit 1
+			clone_source || exit 1
+			create_src_conf || exit 1
+			build_source || exit 1
 
-		prep_release || exit 1
-		build_base_archive || exit 1
-		build_kernel_archives || exit 1
-		build_etcupdate_archive || exit 1
-		add_extra_files || exit 1
+			prep_release || exit 1
+			build_base_archive || exit 1
+			build_kernel_archives || exit 1
+			build_etcupdate_archive || exit 1
+			add_extra_files || exit 1
+		fi
+
 		sign_artifacts || exit 1
+		sanity_check_archive || exit 1
 		build_update_archive || exit 1
 		touch ${STAGEDIR}/success
 		exit 0
@@ -366,6 +424,7 @@ main() {
 	fi
 
 	rm -f ${STAGEDIR}/lock
+	rm -f ${STAGEDIR}/success
 }
 
 main "${@}"
