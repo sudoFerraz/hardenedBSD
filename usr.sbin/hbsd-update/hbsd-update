@@ -31,6 +31,7 @@ buildver=""
 zfsbe=""
 mountpoint="/"
 configfile="/etc/hbsd-update.conf"
+jailname=""
 unsigned=0
 verbose=0
 
@@ -93,6 +94,20 @@ get_version() {
 
 	if [ ${verbose} -gt 0 ]; then
 		debug_print "[*] Latest build: ${buildver}"
+	fi
+
+	return 0
+}
+
+check_jailname() {
+	if [ -z "${jailname}" ]; then
+		return 0
+	fi
+
+	mountpoint=$(jls -j ${jailname} path 2>/dev/null)
+	if [ -z "${mountpoint}" ]; then
+		debug_print "[-] Jail ${jailname} not found"
+		return 1
 	fi
 
 	return 0
@@ -316,6 +331,11 @@ check_sanity() {
 		debug_print "[-] Missing setting: kernel"
 		exit 1
 	fi
+
+	if [ ! -z "${zfsbe}" ] && [ ! -z "${jailname}" ]; then
+		debug_print "[-] ZFS BE and Jail options are mutually exclusive"
+		exit 1
+	fi
 }
 
 main() {
@@ -333,8 +353,7 @@ main() {
 				configfile="${OPTARG}"
 				;;
 			j)
-				debug_print "Installing to a jail is not supported, yet."
-				exit 1
+				jailname="${OPTARG}"
 				;;
 			t)
 				tmpdir="${OPTARG}"
@@ -355,6 +374,11 @@ main() {
 	done
 
 	check_sanity
+	check_jailname
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		exit 1
+	fi
 
 	if [ -z "${tmpdir}" ]; then
 		get_tmpdir > /dev/null
