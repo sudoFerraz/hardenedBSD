@@ -197,8 +197,6 @@ apply_base() {
 		debug_print "[*] Updating /etc"
 	fi
 
-	etcupdate extract -t ${tmpdir}/etcupdate.tbz
-
 	etcupdate -t ${tmpdir}/etcupdate.tbz \
 	    -D ${mountpoint} \
 	    -I /etc/passwd \
