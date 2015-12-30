@@ -239,6 +239,19 @@ apply_base() {
 			awk '{print $1;}')
 	done
 
+	chflags -R schg \
+		${mountpoint}/bin \
+		${mountpoint}/sbin \
+		${mountpoint}/lib \
+		${mountpoint}/libexec \
+		${mountpoint}/usr/bin \
+		${mountpoint}/usr/sbin \
+		${mountpoint}/usr/lib
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return ${res}
+	fi
+
 	return 0
 }
 
