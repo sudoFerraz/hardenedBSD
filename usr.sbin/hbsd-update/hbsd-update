@@ -165,7 +165,7 @@ check_set_validity() {
 		return 1
 	fi
 
-	for file in $(echo ${checkfiles}); do
+	for file in ${checkfiles}; do
 		if [ ${verbose} -gt 0 ]; then
 			debug_print "[*] Checking the validity of ${file}"
 		fi
@@ -244,19 +244,6 @@ apply_base() {
 			wc -l | \
 			awk '{print $1;}')
 	done
-
-	chflags -R schg \
-		${mountpoint}/bin \
-		${mountpoint}/sbin \
-		${mountpoint}/lib \
-		${mountpoint}/libexec \
-		${mountpoint}/usr/bin \
-		${mountpoint}/usr/sbin \
-		${mountpoint}/usr/lib
-	res=${?}
-	if [ ${res} -gt 0 ]; then
-		return ${res}
-	fi
 
 	return 0
 }
