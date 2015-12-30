@@ -29,9 +29,10 @@
 tmpdir=""
 buildver=""
 zfsbe=""
+jailname=""
 mountpoint="/"
 configfile="/etc/hbsd-update.conf"
-jailname=""
+backupkern="kernel.old"
 unsigned=0
 verbose=0
 
@@ -46,6 +47,7 @@ usage() {
 	debug_print "\t-c config\tUse a non-default config file"
 	debug_print "\t-h\t\tShow this help screen"
 	debug_print "\t-j jailname\tInstall updates to jail <jailname>"
+	debug_print "\t-K backupkern\tBackup the previous kernel to <backupkern>"
 	debug_print "\t-t tmpdir\tTemporary directory"
 	debug_print "\t-U\t\tAllow unsigned updates"
 	debug_print "\t-v version\tUse a different version"
@@ -260,6 +262,26 @@ apply_kernel() {
 		debug_print "[*] Applying kernel ${kernel}"
 	fi
 
+	if [ ! -z "${backupkern}" ]; then
+		rm -rf ${mountpoint}/boot/${backupkern}
+		cp -pR ${mountpoint}/boot/kernel \
+			${mountpoint}/boot/${backupkern}
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			return ${res}
+		fi
+
+		if [ -d ${mountpoint}/usr/lib/debug/boot/kernel ]; then
+			rm -rf ${mountpoint}/usr/lib/debug/boot/${backupkern}
+			cp -pR ${mountpoint}/usr/lib/debug/boot/kernel \
+				${mountpoint}/usr/lib/debug/boot/${backupkern}
+			res=${?}
+			if [ ${res} -gt 0 ]; then
+				return ${res}
+			fi
+		fi
+	fi
+
 	tar -xpf ${tmpdir}/kernel-${kernel}.txz \
 		-X ${tmpdir}/skip.txt \
 		-C ${mountpoint}
@@ -352,7 +374,7 @@ check_sanity() {
 }
 
 main() {
-	while getopts 'hUVb:c:j:t:u:v:' opt; do
+	while getopts 'hUVb:c:j:K:t:u:v:' opt; do
 		case "${opt}" in
 			b)
 				if ! which -s beadm; then
@@ -367,6 +389,9 @@ main() {
 				;;
 			j)
 				jailname="${OPTARG}"
+				;;
+			K)
+				backupkern="${OPTARG}"
 				;;
 			t)
 				tmpdir="${OPTARG}"

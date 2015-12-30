@@ -37,6 +37,7 @@
 .Op Fl c Ar config
 .Op Fl h
 .Op Fl j Ar jail
+.Op Fl K Ar backupkern
 .Op Fl t Ar tmpdir
 .Op Fl U
 .Op Fl v Ar version
@@ -64,6 +65,11 @@ Show the help menu.
 .It Fl j Ar jail
 Install the update into jail
 .Ar jail .
+.It Fl K Ar backupkern
+Name of the kernel directory to backup the currently-installed kernel
+to.
+(Default:
+.Dq kernel.old )
 .It Fl t Ar tempdir
 Specify a custom temporary directory for downloading and parsing
 the update.
