@@ -209,6 +209,10 @@ apply_base() {
 	tar -xpf ${tmpdir}/base.txz \
 		-X ${tmpdir}/skip.txt \
 		-C ${mountpoint}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return 1
+	fi
 
 	if [ ${verbose} -gt 0 ]; then
 		debug_print "[*] Updating /etc"
@@ -285,8 +289,18 @@ apply_kernel() {
 	tar -xpf ${tmpdir}/kernel-${kernel}.txz \
 		-X ${tmpdir}/skip.txt \
 		-C ${mountpoint}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return 1
+	fi
+
 	kldxref /boot/kernel
-	return ${?}
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		return 1
+	fi
+
+	return 0
 }
 
 create_be() {
