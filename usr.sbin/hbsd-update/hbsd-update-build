@@ -53,8 +53,8 @@ setup_environment() {
 	OUTPUTDIR="/builds/updater/output"
 	CHROOTDIR="/builds/updater/chroot"
 	LOGDIR="/builds/updater/logs"
-	FULLCLEAN="no"
-	DEVMODE="yes" # set to empty instead of "no"
+	FULLCLEAN="yes"
+	DEVMODE="" # set to empty instead of "no"
 	SRCCONFPATH=""
 	DEBUGBUILD=""
 	USE_EXISTING=0
