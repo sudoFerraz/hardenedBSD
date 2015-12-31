@@ -35,6 +35,7 @@ configfile="/etc/hbsd-update.conf"
 backupkern="kernel.old"
 unsigned=0
 verbose=0
+ignorever=0
 
 TAR="/usr/bin/tar"
 GREP="/usr/bin/grep"
@@ -117,6 +118,10 @@ get_version() {
 
 check_version() {
 	local testversion
+
+	if [ ${ignorever} -eq 1 ]; then
+		return 0
+	fi
 
 	if [ ! -f ${mountpoint}/var/db/hbsd-update/version ]; then
 		return 0
@@ -423,7 +428,7 @@ check_sanity() {
 }
 
 main() {
-	while getopts 'hUVb:c:j:K:t:u:v:' opt; do
+	while getopts 'hiUVb:c:j:K:t:u:v:' opt; do
 		case "${opt}" in
 			b)
 				if ! which -s ${BEADM}; then
@@ -435,6 +440,9 @@ main() {
 				;;
 			c)
 				configfile="${OPTARG}"
+				;;
+			i)
+				ignorever=1
 				;;
 			j)
 				jailname="${OPTARG}"
