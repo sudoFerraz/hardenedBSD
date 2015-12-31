@@ -36,6 +36,20 @@ backupkern="kernel.old"
 unsigned=0
 verbose=0
 
+TAR="/usr/bin/tar"
+GREP="/usr/bin/grep"
+SED="/usr/bin/sed"
+AWK="/usr/bin/awk"
+ETCUPDATE="/usr/sbin/etcupdate"
+FETCH="/usr/bin/fetch"
+DRILL="/usr/bin/drill"
+MKTEMP="/usr/bin/mktemp"
+OPENSSL="/usr/bin/openssl"
+CHFLAGS="/bin/chflags"
+JLS="/usr/bin/jls"
+KLDXREF="/usr/sbin/kldxref"
+BEADM="/usr/local/sbin/beadm"
+
 debug_print() {
 	echo -e "${1}" >&2
 }
@@ -57,7 +71,7 @@ usage() {
 
 get_tmpdir() {
 	if [ -z "${tmpdir}" ]; then
-		tmpdir=$(mktemp -d)
+		tmpdir=$(${MKTEMP} -d)
 	fi
 
 	echo ${tmpdir}
@@ -74,19 +88,19 @@ get_version() {
 
 	if [ ! -z "${dnsrec}" ]; then
 		# Prefer DNS, fallback to HTTP
-		res=$(drill ${dnsrec} txt | \
-			grep -F TXT | \
-			grep -vF ';;' | \
-			awk '{print $5;}' | \
-			sed 's,",,g')
-		buildver=$(echo ${res} | sed 's,|, ,g' | awk '{print $2;}')
+		res=$(${DRILL} ${dnsrec} txt | \
+			${GREP} -F TXT | \
+			${GREP} -vF ';;' | \
+			${AWK} '{print $5;}' | \
+			${SED} 's,",,g')
+		buildver=$(echo ${res} | ${SED} 's,|, ,g' | ${AWK} '{print $2;}')
 	fi
 
 	if [ -z "${buildver}" ]; then
 		# Attempt to grab the version from HTTP
-		buildver=$(curl ${baseurl}/update-latest.txt | \
-			sed 's,|, ,g' | \
-			awk '{print $2;}')
+		buildver=$(${FETCH} -o - ${baseurl}/update-latest.txt | \
+			${SED} 's,|, ,g' | \
+			${AWK} '{print $2;}')
 		if [ -z "${buildver}" ]; then
 			return 1
 		fi
@@ -101,12 +115,27 @@ get_version() {
 	return 0
 }
 
+check_version() {
+	local testversion
+
+	if [ ! -f ${mountpoint}/var/db/hbsd-update/version ]; then
+		return 0
+	fi
+
+	testversion=$(cat ${mountpoint}/var/db/hbsd-update/version)
+	if [ "${buildver}" = "${testversion}" ]; then
+		return 1
+	fi
+
+	return 0
+}
+
 check_jailname() {
 	if [ -z "${jailname}" ]; then
 		return 0
 	fi
 
-	mountpoint=$(jls -j ${jailname} path 2>/dev/null)
+	mountpoint=$(${JLS} -j ${jailname} path 2>/dev/null)
 	if [ -z "${mountpoint}" ]; then
 		debug_print "[-] Jail ${jailname} not found"
 		return 1
@@ -116,14 +145,14 @@ check_jailname() {
 }
 
 fetch_update() {
-	fetch -o ${tmpdir}/update.tar \
+	${FETCH} -o ${tmpdir}/update.tar \
 		${baseurl}/update-$(get_version).tar
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		return ${res}
 	fi
 
-	tar -xf ${tmpdir}/update.tar \
+	${TAR} -xf ${tmpdir}/update.tar \
 		-C ${tmpdir}
 	res=${?}
 	if [ ${res} -gt 0 ]; then
@@ -143,7 +172,7 @@ check_pubkey_validity() {
 		caopt="-CAfile"
 	fi
 
-	openssl verify \
+	${OPENSSL} verify \
 		${caopt} ${capath} \
 		${tmpdir}/pubkey.pem \
 		> /dev/null 2>&1
@@ -154,7 +183,7 @@ check_pubkey_validity() {
 check_set_validity() {
 	checkfiles="base.txz kernel-${kernel}.txz etcupdate.tbz skip.txt"
 
-	openssl x509 \
+	${OPENSSL} x509 \
 		-in ${tmpdir}/pubkey.pem \
 		-pubkey \
 		-noout \
@@ -170,13 +199,18 @@ check_set_validity() {
 			debug_print "[*] Checking the validity of ${file}"
 		fi
 
-		signedhash=$(openssl rsautl \
+		signedhash=$(${OPENSSL} rsautl \
 			-verify \
 			-in ${tmpdir}/${file}.sig \
 			-pubin \
 			-inkey ${tmpdir}/pubkey.rsa.pem)
 
 		computedhash=$(sha512 -q ${tmpdir}/${file})
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			return 1
+		fi
+
 		if [ ! "${signedhash}" = "${computedhash}" ]; then
 			debug_print "[-] Hashes don't match for ${file}. Signed: ${signedhash}. Computed ${computedhash}."
 			return 1
@@ -193,7 +227,7 @@ apply_base() {
 		debug_print "[*] Applying base"
 	fi
 
-	chflags -R noschg \
+	${CHFLAGS} -R noschg \
 		${mountpoint}/bin \
 		${mountpoint}/sbin \
 		${mountpoint}/lib \
@@ -206,7 +240,7 @@ apply_base() {
 		return ${res}
 	fi
 
-	tar -xpf ${tmpdir}/base.txz \
+	${TAR} -xpf ${tmpdir}/base.txz \
 		-X ${tmpdir}/skip.txt \
 		-C ${mountpoint}
 	res=${?}
@@ -218,14 +252,14 @@ apply_base() {
 		debug_print "[*] Updating /etc"
 	fi
 
-	etcupdate -t ${tmpdir}/etcupdate.tbz \
+	${ETCUPDATE} -t ${tmpdir}/${ETCUPDATE}.tbz \
 	    -D ${mountpoint} \
 	    -I /etc/passwd \
 	    -I /etc/group \
 	    -I /etc/master.passwd \
 	    -I /etc/pwd.db \
 	    -I /etc/spwd.db | while read line; do
-		res=$(echo ${line} | awk '{print $1;}')
+		res=$(echo ${line} | ${AWK} '{print $1;}')
 		if [ "${res}" = "C" ]; then
 			needsresolve=1
 		fi
@@ -233,16 +267,16 @@ apply_base() {
 
 	while [ ${needsresolve} -gt 0 ]; do
 		debug_print "[*] Manual merges need to be done."
-		etcupdate resolve -D ${mountpoint}
+		${ETCUPDATE} resolve -D ${mountpoint}
 		res=${?}
 		if [ ${res} -gt 0 ]; then
 			return 1
 		fi
 
-		needsresolve=$(etcupdate status -D \
+		needsresolve=$(${ETCUPDATE} status -D \
 			${mountpoint} | \
 			wc -l | \
-			awk '{print $1;}')
+			${AWK} '{print $1;}')
 	done
 
 	return 0
@@ -273,7 +307,7 @@ apply_kernel() {
 		fi
 	fi
 
-	tar -xpf ${tmpdir}/kernel-${kernel}.txz \
+	${TAR} -xpf ${tmpdir}/kernel-${kernel}.txz \
 		-X ${tmpdir}/skip.txt \
 		-C ${mountpoint}
 	res=${?}
@@ -281,7 +315,7 @@ apply_kernel() {
 		return 1
 	fi
 
-	kldxref /boot/kernel
+	${KLDXREF} /boot/kernel
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		return 1
@@ -295,14 +329,14 @@ create_be() {
 		return 0
 	fi
 
-	beadm create ${zfsbe}
+	${BEADM} create ${zfsbe}
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		return ${res}
 	fi
 
-	mountpoint=$(mktemp -d)
-	beadm mount ${zfsbe} ${mountpoint}
+	mountpoint=$(${MKTEMP} -d)
+	${BEADM} mount ${zfsbe} ${mountpoint}
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		return ${res}
@@ -311,18 +345,32 @@ create_be() {
 	return 0
 }
 
+cache_version() {
+	# Cache the version number so that we can verify it against
+	# future update requests.
+	if [ ! -d ${mountpoint}/var/db/hbsd-update ]; then
+		mkdir -p ${mountpoint}/var/db/hbsd-update
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			return ${res}
+		fi
+	fi
+
+	echo ${buildver} > ${mountpoint}/var/db/hbsd-update/version
+}
+
 activate_be() {
 	if [ -z "${zfsbe}" ]; then
 		return 0
 	fi
 
-	beadm umount ${zfsbe}
+	${BEADM} umount ${zfsbe}
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		return ${res}
 	fi
 
-	beadm activate ${zfsbe}
+	${BEADM} activate ${zfsbe}
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		return ${res}
@@ -336,8 +384,8 @@ destroy_be() {
 		return 0
 	fi
 
-	beadm umount ${zfsbe}
-	beadm destroy -F ${zfsbe}
+	${BEADM} umount ${zfsbe}
+	${BEADM} destroy -F ${zfsbe}
 	return ${?}
 }
 
@@ -378,7 +426,7 @@ main() {
 	while getopts 'hUVb:c:j:K:t:u:v:' opt; do
 		case "${opt}" in
 			b)
-				if ! which -s beadm; then
+				if ! which -s ${BEADM}; then
 					debug_print "[*] Please install the beadm pkg."
 					exit 1
 				fi
@@ -433,6 +481,14 @@ main() {
 		fi
 	fi
 
+	check_version
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		debug_print "[*] This system is already on the latest version."
+		cleanup
+		exit 0
+	fi
+
 	fetch_update
 	res=${?}
 	if [ ${res} -gt 0 ]; then
@@ -475,6 +531,14 @@ main() {
 	fi
 
 	apply_kernel
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		cleanup
+		destroy_be
+		exit 1
+	fi
+
+	cache_version
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		cleanup
