@@ -26,30 +26,32 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 
-tmpdir=""
 buildver=""
-zfsbe=""
 jailname=""
-mountpoint="/"
-configfile="/etc/hbsd-update.conf"
+tmpdir=""
+zfsbe=""
+
 backupkern="kernel.old"
+configfile="/etc/hbsd-update.conf"
+mountpoint="/"
+
+ignorever=0
 unsigned=0
 verbose=0
-ignorever=0
 
-TAR="/usr/bin/tar"
-GREP="/usr/bin/grep"
-SED="/usr/bin/sed"
 AWK="/usr/bin/awk"
+BEADM="/usr/local/sbin/beadm"
+CHFLAGS="/bin/chflags"
+DRILL="/usr/bin/drill"
 ETCUPDATE="/usr/sbin/etcupdate"
 FETCH="/usr/bin/fetch"
-DRILL="/usr/bin/drill"
-MKTEMP="/usr/bin/mktemp"
-OPENSSL="/usr/bin/openssl"
-CHFLAGS="/bin/chflags"
+GREP="/usr/bin/grep"
 JLS="/usr/bin/jls"
 KLDXREF="/usr/sbin/kldxref"
-BEADM="/usr/local/sbin/beadm"
+MKTEMP="/usr/bin/mktemp"
+OPENSSL="/usr/bin/openssl"
+SED="/usr/bin/sed"
+TAR="/usr/bin/tar"
 
 debug_print() {
 	echo -e "${1}" >&2
