@@ -349,17 +349,14 @@ pax_segvguard_setup_flags(struct image_params *imgp, struct thread *td, uint32_t
 
 
 static bool
-pax_segvguard_active(struct proc *proc)
+pax_segvguard_active_td(struct thread *td)
 {
 	uint32_t flags;
 
-	if (proc == NULL)
-		return (true);
-
-	pax_get_flags(proc, &flags);
+	pax_get_flags_td(td, &flags);
 
 	CTR3(KTR_PAX, "%s: pid = %d p_pax = %x",
-	    __func__, proc->p_pid, flags);
+	    __func__, td->td_proc->p_pid, flags);
 
 	if ((flags & PAX_NOTE_SEGVGUARD) == PAX_NOTE_SEGVGUARD)
 		return (true);
@@ -484,14 +481,14 @@ pax_segvguard_segfault(struct thread *td, const char *name)
 	struct vnode *v;
 	sbintime_t sbt;
 
+	if (pax_segvguard_active_td(td) == false)
+		return (0);
+
 	v = td->td_proc->p_textvp;
 	if (v == NULL)
 		return (EFAULT);
 
 	pr = pax_get_prison_td(td);
-
-	if (pax_segvguard_active(td->td_proc) == false)
-		return (0);
 
 	sbt = sbinuptime();
 
@@ -527,11 +524,12 @@ pax_segvguard_check(struct thread *td, struct vnode *v, const char *name)
 	struct pax_segvguard_entry *se;
 	sbintime_t sbt;
 
+	if (pax_segvguard_active_td(td) == false)
+		return (0);
+
+
 	if (v == NULL)
 		return (EFAULT);
-
-	if (pax_segvguard_active(td->td_proc) == false)
-		return (0);
 
 	sbt = sbinuptime();
 
