@@ -1,6 +1,6 @@
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
- * Copyright (c) 2013-2014, by Oliver Pinter <oliver.pinter@hardenedbsd.org>
+ * Copyright (c) 2013-2015, by Oliver Pinter <oliver.pinter@hardenedbsd.org>
  * Copyright (c) 2014, by Shawn Webb <shawn.webb@hardenedbsd.org>
  * Copyright (c) 2014, by Danilo Egea Gondolfo <danilo at FreeBSD.org>
  * All rights reserved.
@@ -276,12 +276,13 @@ pax_segvguard_init_prison(struct prison *pr)
 	}
 }
 
-uint32_t
-pax_segvguard_setup_flags(struct image_params *imgp, struct thread *td, uint32_t mode)
+pax_flag_t
+pax_segvguard_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mode)
 {
 	struct prison *pr;
 	struct vattr vap;
-	uint32_t flags, status;
+	pax_flag_t flags;
+	uint32_t status;
 	int ret;
 
 	KASSERT(imgp->proc == td->td_proc,
@@ -350,7 +351,7 @@ pax_segvguard_setup_flags(struct image_params *imgp, struct thread *td, uint32_t
 static bool
 pax_segvguard_active_td(struct thread *td)
 {
-	uint32_t flags;
+	pax_flag_t flags;
 
 	pax_get_flags_td(td, &flags);
 
@@ -471,6 +472,25 @@ pax_segvguard_lookup(struct thread *td, struct vnode *vn)
 	return (NULL);
 }
 
+<<<<<<< HEAD
+=======
+void
+pax_segvguard_remove(struct thread *td, struct vnode *vn)
+{
+	struct pax_segvguard_entry *v;
+	struct pax_segvguard_key *key;
+
+	v = pax_segvguard_lookup(td, vn);
+
+	if (v != NULL) {
+		key = PAX_SEGVGUARD_KEY(v);
+		PAX_SEGVGUARD_LOCK(PAX_SEGVGUARD_HASH(*key));
+		LIST_REMOVE(v, se_entry);
+		PAX_SEGVGUARD_UNLOCK(PAX_SEGVGUARD_HASH(*key));
+		free(v, M_PAX);
+	}
+}
+>>>>>>> origin/hardened/current/master
 
 int
 pax_segvguard_segfault(struct thread *td, const char *name)
