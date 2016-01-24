@@ -169,12 +169,7 @@ void pax_segvguard_init_prison(struct prison *pr);
 #endif
 int pax_segvguard_check(struct thread *, struct vnode *, const char *);
 int pax_segvguard_segfault(struct thread *, const char *);
-<<<<<<< HEAD
-uint32_t pax_segvguard_setup_flags(struct image_params *imgp, struct thread *td, uint32_t mode);
-=======
-void pax_segvguard_remove(struct thread *td, struct vnode *vn);
 pax_flag_t pax_segvguard_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mode);
->>>>>>> origin/hardened/current/master
 
 /*
  * PAX PAGEEXEC and MPROTECT hardening

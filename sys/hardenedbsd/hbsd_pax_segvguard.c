@@ -472,26 +472,6 @@ pax_segvguard_lookup(struct thread *td, struct vnode *vn)
 	return (NULL);
 }
 
-<<<<<<< HEAD
-=======
-void
-pax_segvguard_remove(struct thread *td, struct vnode *vn)
-{
-	struct pax_segvguard_entry *v;
-	struct pax_segvguard_key *key;
-
-	v = pax_segvguard_lookup(td, vn);
-
-	if (v != NULL) {
-		key = PAX_SEGVGUARD_KEY(v);
-		PAX_SEGVGUARD_LOCK(PAX_SEGVGUARD_HASH(*key));
-		LIST_REMOVE(v, se_entry);
-		PAX_SEGVGUARD_UNLOCK(PAX_SEGVGUARD_HASH(*key));
-		free(v, M_PAX);
-	}
-}
->>>>>>> origin/hardened/current/master
-
 int
 pax_segvguard_segfault(struct thread *td, const char *name)
 {
