@@ -99,7 +99,11 @@ __DEFAULT_YES_OPTIONS = \
     GPL_DTC \
     GROFF \
     HAST \
+<<<<<<< HEAD
     HBSD_EXTRA_SANITIZE \
+=======
+    HBSD_UPDATE \
+>>>>>>> origin/hardened/current/master
     HTML \
     HYPERV \
     ICONV \
