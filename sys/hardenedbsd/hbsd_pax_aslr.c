@@ -66,16 +66,29 @@ __FBSDID("$FreeBSD$");
  * generic ASLR values
  *
  *  		| 32 bit | 64 bit | compat |
+<<<<<<< HEAD
  * 	+-------+--------+--------+--------+
  * 	| MMAP	| 14 bit | 30 bit | 14 bit |
  * 	+-------+--------+--------+--------+
  * 	| STACK	| 10 bit | 16 bit | 10 bit |
+=======
  * 	+-------+--------+--------+--------+
- * 	| DEF	| 14 bit | 30 bit | 14 bit |
+ * 	| MMAP	| 14 bit | 30 bit | 14 bit |
+ * 	+-------+--------+--------+--------+
+ * 	| STACK	| 10 bit | 42 bit | 10 bit |
+ * 	+-------+--------+--------+--------+
+ * 	| EXEC  | 14 bit | 30 bit | 14 bit |
+>>>>>>> origin/hardened/10-stable/master
  * 	+-------+--------+--------+--------+
  * 	| VDSO	| 10 bit | 28 bit | 10 bit |
  * 	+-------+--------+--------+--------+
+<<<<<<< HEAD
+ * 	| VDSO	| 10 bit | 28 bit | 10 bit |
+ * 	+-------+--------+--------+--------+
  * 	| M32B	|  N.A.  | 24 bit |  N.A.  |
+=======
+ * 	| M32B	|  N.A.  | 18 bit |  N.A.  |
+>>>>>>> origin/hardened/10-stable/master
  * 	+-------+--------+--------+--------+
  *
  */
@@ -129,7 +142,7 @@ __FBSDID("$FreeBSD$");
 
 #ifdef MAP_32BIT
 #ifndef PAX_ASLR_DELTA_MAP32BIT_DEF_LEN
-#define	PAX_ASLR_DELTA_MAP32BIT_DEF_LEN	24
+#define	PAX_ASLR_DELTA_MAP32BIT_DEF_LEN	18
 #endif /* PAX_ASLR_DELTA_MAP32BIT_DEF_LEN */
 #endif /* MAP_32BIT */
 
