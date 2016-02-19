@@ -63,17 +63,11 @@ __FBSDID("$FreeBSD$");
 
 FEATURE(hbsd_segvguard, "Segmentation fault protection.");
 
-<<<<<<< HEAD
-FEATURE(segvguard, "Segmentation fault protection.");
-
-static int pax_segvguard_status = PAX_FEATURE_OPTOUT;
-=======
 #ifdef PAX_HARDENING
 static int pax_segvguard_status = PAX_FEATURE_OPTIN; /* XXXOP */
 #else
 static int pax_segvguard_status = PAX_FEATURE_OPTIN;
 #endif
->>>>>>> origin/hardened/current/master
 static int pax_segvguard_expiry = PAX_SEGVGUARD_EXPIRY;
 static int pax_segvguard_suspension = PAX_SEGVGUARD_SUSPENSION;
 static int pax_segvguard_maxcrashes = PAX_SEGVGUARD_MAXCRASHES;
@@ -395,16 +389,9 @@ pax_segvguard_add(struct thread *td, struct vnode *vn, sbintime_t sbt)
 
 	callout_init_mtx(&se->se_callout, &PAX_SEGVGUARD_BUCKET(se)->bucket_mtx, 0);
 
-<<<<<<< HEAD
 	PAX_SEGVGUARD_LOCK(se);
 	LIST_INSERT_HEAD(PAX_SEGVGUARD_BUCKET(se), se, se_entry);
 	PAX_SEGVGUARD_UNLOCK(se);
-=======
-	v->se_uid = td->td_ucred->cr_ruid;
-	v->se_ncrashes = 1;
-	v->se_expiry = sbt + pr->pr_hbsd.segvguard.expiry * SBT_1S;
-	v->se_suspended = 0;
->>>>>>> origin/hardened/current/master
 
 	callout_reset(&se->se_callout, pr->pr_hardening.hr_pax_segvguard_expiry * hz,
 	    pax_segvguard_cleaner, se);
@@ -482,35 +469,16 @@ pax_segvguard_segfault(struct thread *td, const char *name)
 	if (se == NULL) {
 		pax_segvguard_add(td, v, sbt);
 	} else {
-<<<<<<< HEAD
-=======
-		if (se->se_expiry < sbt && se->se_suspended <= sbt) {
-			pax_log_segvguard(td->td_proc, PAX_LOG_DEFAULT,
-			    "[%s (%d)] Suspension expired.", name, td->td_proc->p_pid);
-			se->se_ncrashes = 1;
-			se->se_expiry = sbt + pr->pr_hbsd.segvguard.expiry * SBT_1S;
-			se->se_suspended = 0;
-
-			return (0);
-		}
-
->>>>>>> origin/hardened/current/master
 		se->se_ncrashes++;
 
 		if (se->se_ncrashes >= pax_segvguard_maxcrashes) {
 			printf("[%s (%d)] Suspending execution for %d seconds after %zu crashes.\n",
 			    name, td->td_proc->p_pid,
 			    pax_segvguard_suspension, se->se_ncrashes);
-<<<<<<< HEAD
 
 			callout_reset(&se->se_callout,
 			    pr->pr_hardening.hr_pax_segvguard_suspension * hz,
 			    pax_segvguard_cleaner, se);
-=======
-			se->se_suspended = sbt + pr->pr_hbsd.segvguard.suspension * SBT_1S;
-			se->se_ncrashes = 0;
-			se->se_expiry = 0;
->>>>>>> origin/hardened/current/master
 		}
 
 		PAX_SEGVGUARD_UNLOCK(se);
