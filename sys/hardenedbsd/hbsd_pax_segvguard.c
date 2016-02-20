@@ -392,7 +392,7 @@ pax_segvguard_add(struct thread *td, struct vnode *vn, sbintime_t sbt)
 	LIST_INSERT_HEAD(PAX_SEGVGUARD_BUCKET(se), se, se_entry);
 	PAX_SEGVGUARD_UNLOCK(se);
 
-	callout_reset(&se->se_callout, pr->pr_hardening.hr_pax_segvguard_expiry * hz,
+	callout_reset(&se->se_callout, pr->pr_hbsd.segvguard.expiry * hz,
 	    pax_segvguard_cleaner, se);
 
 	return (se);
@@ -476,7 +476,7 @@ pax_segvguard_segfault(struct thread *td, const char *name)
 			    pax_segvguard_suspension, se->se_ncrashes);
 
 			callout_reset(&se->se_callout,
-			    pr->pr_hardening.hr_pax_segvguard_suspension * hz,
+			    pr->pr_hbsd.segvguard.suspension * hz,
 			    pax_segvguard_cleaner, se);
 		}
 
