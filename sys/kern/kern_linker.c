@@ -30,6 +30,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_ddb.h"
 #include "opt_kld.h"
 #include "opt_hwpmc_hooks.h"
+#include "opt_pax.h"
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -1131,6 +1132,10 @@ sys_kldfind(struct thread *td, struct kldfind_args *uap)
 		return (error);
 #endif
 
+	error = priv_check(td, PRIV_KLD_STAT);
+	if (error != 0)
+		return (error);
+
 	td->td_retval[0] = -1;
 
 	pathname = malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
@@ -1161,6 +1166,10 @@ sys_kldnext(struct thread *td, struct kldnext_args *uap)
 	if (error)
 		return (error);
 #endif
+
+	error = priv_check(td, PRIV_KLD_STAT);
+	if (error != 0)
+		return (error);
 
 	sx_xlock(&kld_sx);
 	if (uap->fileid == 0)
@@ -1222,6 +1231,10 @@ kern_kldstat(struct thread *td, int fileid, struct kld_file_stat *stat)
 		return (error);
 #endif
 
+	error = priv_check(td, PRIV_KLD_STAT);
+	if (error != 0)
+		return (error);
+
 	sx_xlock(&kld_sx);
 	lf = linker_find_file_by_id(fileid);
 	if (lf == NULL) {
@@ -1236,7 +1249,11 @@ kern_kldstat(struct thread *td, int fileid, struct kld_file_stat *stat)
 	bcopy(lf->filename, &stat->name[0], namelen);
 	stat->refs = lf->refs;
 	stat->id = lf->id;
+#ifdef PAX_HARDENING
+	stat->address = NULL;
+#else
 	stat->address = lf->address;
+#endif
 	stat->size = lf->size;
 	/* Version 2 fields: */
 	namelen = strlen(lf->pathname) + 1;
@@ -1261,6 +1278,10 @@ sys_kldfirstmod(struct thread *td, struct kldfirstmod_args *uap)
 	if (error)
 		return (error);
 #endif
+
+	error = priv_check(td, PRIV_KLD_STAT);
+	if (error != 0)
+		return (error);
 
 	sx_xlock(&kld_sx);
 	lf = linker_find_file_by_id(uap->fileid);
@@ -1294,6 +1315,10 @@ sys_kldsym(struct thread *td, struct kldsym_args *uap)
 		return (error);
 #endif
 
+	error = priv_check(td, PRIV_KLD_STAT);
+	if (error != 0)
+		return (error);
+
 	if ((error = copyin(uap->data, &lookup, sizeof(lookup))) != 0)
 		return (error);
 	if (lookup.version != sizeof(lookup) ||
@@ -1309,7 +1334,11 @@ sys_kldsym(struct thread *td, struct kldsym_args *uap)
 			error = ENOENT;
 		else if (LINKER_LOOKUP_SYMBOL(lf, symstr, &sym) == 0 &&
 		    LINKER_SYMBOL_VALUES(lf, sym, &symval) == 0) {
+#ifdef PAX_HARDENING
+			lookup.symvalue = (uintptr_t) NULL;
+#else
 			lookup.symvalue = (uintptr_t) symval.value;
+#endif
 			lookup.symsize = symval.size;
 			error = copyout(&lookup, uap->data, sizeof(lookup));
 		} else
@@ -1318,7 +1347,11 @@ sys_kldsym(struct thread *td, struct kldsym_args *uap)
 		TAILQ_FOREACH(lf, &linker_files, link) {
 			if (LINKER_LOOKUP_SYMBOL(lf, symstr, &sym) == 0 &&
 			    LINKER_SYMBOL_VALUES(lf, sym, &symval) == 0) {
+#ifdef PAX_HARDENING
+				lookup.symvalue = (uintptr_t)NULL;
+#else
 				lookup.symvalue = (uintptr_t)symval.value;
+#endif
 				lookup.symsize = symval.size;
 				error = copyout(&lookup, uap->data,
 				    sizeof(lookup));

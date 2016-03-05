@@ -1,6 +1,6 @@
 /*-
  * Copyright (c) 2014, by Shawn Webb <shawn.webb at hardenedbsd.org>
- * Copyright (c) 2014, by Oliver Pinter <oliver.pinter@hardenedbsd.org>
+ * Copyright (c) 2014-2016, by Oliver Pinter <oliver.pinter@hardenedbsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,8 +49,9 @@ __FBSDID("$FreeBSD$");
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 
+#include "hbsd_pax_internal.h"
 
-FEATURE(pax_hardening, "Various hardening features.");
+FEATURE(hbsd_hardening, "Various hardening features.");
 
 #if __FreeBSD_version < 1100000
 #define	kern_unsetenv	unsetenv
@@ -66,19 +67,15 @@ static int pax_randomize_pids_global = PAX_FEATURE_SIMPLE_DISABLED;
 static int pax_init_hardening_global = PAX_FEATURE_SIMPLE_DISABLED;
 #endif
 
-#ifdef PAX_SYSCTLS
-static int sysctl_pax_procfs(SYSCTL_HANDLER_ARGS);
-
-SYSCTL_PROC(_hardening, OID_AUTO, procfs_harden,
-    CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_SECURE,
-    NULL, 0, sysctl_pax_procfs, "I",
-    "Harden procfs, disabling write of /proc/pid/mem. "
-    "0 - disabled, "
-    "1 - enabled.");
-#endif
-
 TUNABLE_INT("hardening.procfs_harden", &pax_procfs_harden_global);
 TUNABLE_INT("hardening.randomize_pids", &pax_randomize_pids_global);
+
+#ifdef PAX_SYSCTLS
+SYSCTL_HBSD_2STATE(pax_procfs_harden_global, pr_hbsd.hardening.procfs_harden,
+    _hardening, procfs_harden,
+    CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_SECURE,
+    "Harden procfs, disabling write of /proc/pid/mem");
+#endif
 
 static void
 pax_hardening_sysinit(void)
@@ -120,32 +117,6 @@ pax_hardening_sysinit(void)
 }
 SYSINIT(pax_hardening, SI_SUB_PAX, SI_ORDER_SECOND, pax_hardening_sysinit, NULL);
 
-#ifdef PAX_SYSCTLS
-static int
-sysctl_pax_procfs(SYSCTL_HANDLER_ARGS)
-{
-	struct prison *pr;
-	int err, val;
-
-	pr = pax_get_prison_td(req->td);
-
-	val = pr->pr_hardening.hr_pax_procfs_harden;
-	err = sysctl_handle_int(oidp, &val, sizeof(int), req);
-	if (err || (req->newptr == NULL))
-		return (err);
-
-	if (val > 1 || val < -1)
-		return (EINVAL);
-
-	if (pr == &prison0)
-		pax_procfs_harden_global = val;
-
-	pr->pr_hardening.hr_pax_procfs_harden = val;
-
-	return (0);
-}
-#endif
-
 void
 pax_hardening_init_prison(struct prison *pr)
 {
@@ -156,15 +127,15 @@ pax_hardening_init_prison(struct prison *pr)
 
 	if (pr == &prison0) {
 		/* prison0 has no parent, use globals */
-		pr->pr_hardening.hr_pax_procfs_harden =
+		pr->pr_hbsd.hardening.procfs_harden =
 		    pax_procfs_harden_global;
 	} else {
 		KASSERT(pr->pr_parent != NULL,
 		   ("%s: pr->pr_parent == NULL", __func__));
 		pr_p = pr->pr_parent;
 
-		pr->pr_hardening.hr_pax_procfs_harden =
-		    pr_p->pr_hardening.hr_pax_procfs_harden;
+		pr->pr_hbsd.hardening.procfs_harden =
+		    pr_p->pr_hbsd.hardening.procfs_harden;
 	}
 }
 
@@ -175,67 +146,9 @@ pax_procfs_harden(struct thread *td)
 
 	pr = pax_get_prison_td(td);
 
-	return (pr->pr_hardening.hr_pax_procfs_harden ? EPERM : 0);
+	return (pr->pr_hbsd.hardening.procfs_harden ? EPERM : 0);
 }
 
-uint32_t
-pax_hardening_setup_flags(struct image_params *imgp, uint32_t mode)
-{
-	struct prison *pr;
-	uint32_t flags, status;
-
-	flags = 0;
-	status = 0;
-
-	pr = pax_get_prison(imgp->proc);
-#if 0
-	status = pr->pr_hardening.hr_pax_FOO_status;
-
-	if (status == PAX_FEATURE_DISABLED) {
-		flags &= ~PAX_NOTE_FOO;
-		flags |= PAX_NOTE_NOFOO;
-
-		return (flags);
-	}
-
-	if (status == PAX_FEATURE_FORCE_ENABLED) {
-		flags &= ~PAX_NOTE_NOFOO;
-		flags |= PAX_NOTE_FOO;
-
-		return (flags);
-	}
-
-	if (status == PAX_FEATURE_OPTIN) {
-		if (mode & PAX_NOTE_FOO) {
-			flags |= PAX_NOTE_FOO;
-			flags &= ~PAX_NOTE_NOFOO;
-		} else {
-			flags &= ~PAX_NOTE_FOO;
-			flags |= PAX_NOTE_NOFOO;
-		}
-
-		return (flags);
-	}
-
-	if (status == PAX_FEATURE_OPTOUT) {
-		if (mode & PAX_NOTE_NOFOO) {
-			flags |= PAX_NOTE_NOFOO;
-			flags &= ~PAX_NOTE_FOO;
-		} else {
-			flags &= ~PAX_NOTE_NOFOO;
-			flags |= PAX_NOTE_FOO;
-		}
-
-		return (flags);
-	}
-
-	/* Unknown status, force FOO restriction. */
-	flags |= PAX_NOTE_FOO;
-	flags &= ~PAX_NOTE_NOFOO;
-#endif
-
-	return (flags);
-}
 
 extern int randompid;
 
@@ -247,7 +160,7 @@ pax_randomize_pids(void *dummy __unused)
 	if (pax_randomize_pids_global == PAX_FEATURE_SIMPLE_DISABLED)
 		return;
 
-	modulus = maxproc - 200;
+	modulus = pid_max - 200;
 
 	sx_xlock(&allproc_lock);
 	randompid = arc4random() % modulus + 100;
@@ -255,6 +168,7 @@ pax_randomize_pids(void *dummy __unused)
 }
 SYSINIT(pax_randomize_pids, SI_SUB_KTHREAD_INIT, SI_ORDER_MIDDLE+1,
     pax_randomize_pids, NULL);
+
 
 static void
 pax_init_hardening(void *dummy __unused)

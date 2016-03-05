@@ -166,6 +166,10 @@ SUBDIR+=	gssd
 SUBDIR+=	gpioctl
 .endif
 
+.if ${MK_HBSD_UPDATE} != "no"
+SUBDIR+=	hbsd-update
+.endif
+
 .if ${MK_INET6} != "no"
 SUBDIR+=	faithd
 SUBDIR+=	ip6addrctl

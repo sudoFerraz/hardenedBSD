@@ -1,6 +1,6 @@
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
- * Copyright (c) 2013-2014, by Oliver Pinter <oliver.pinter@hardenedbsd.org>
+ * Copyright (c) 2013-2015, by Oliver Pinter <oliver.pinter@hardenedbsd.org>
  * Copyright (c) 2014, by Shawn Webb <lattera at gmail.com>
  * All rights reserved.
  *
@@ -29,35 +29,33 @@
  * $FreeBSD$
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_pax.h"
 
+#include <sys/cdefs.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/ktr.h>
-#include <sys/imgact.h>
-#include <sys/stat.h>
-#include <sys/proc.h>
-#include <sys/pax.h>
-#include <sys/sysctl.h>
-#include <sys/libkern.h>
-#include <sys/jail.h>
-
-#include <sys/mman.h>
-#include <sys/libkern.h>
 #include <sys/exec.h>
+#include <sys/imgact.h>
+#include <sys/jail.h>
 #include <sys/kthread.h>
+#include <sys/ktr.h>
+#include <sys/libkern.h>
+#include <sys/libkern.h>
+#include <sys/mman.h>
+#include <sys/pax.h>
+#include <sys/proc.h>
+#include <sys/stat.h>
+#include <sys/sysctl.h>
 
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
 #include <vm/vm_param.h>
 #include <vm/vm_extern.h>
 
-FEATURE(pax_pageexec, "PAX PAGEEXEC hardening");
-FEATURE(pax_mprotect, "PAX MPROTECT hardening");
+#include "hbsd_pax_internal.h"
+
+FEATURE(hbsd_noexec, "PAX PAGEEXEC and MPROTECT hardening");
 
 #ifdef PAX_HARDENING
 static int pax_pageexec_status = PAX_FEATURE_OPTOUT;
@@ -72,102 +70,19 @@ TUNABLE_INT("hardening.pax.mprotect.status", &pax_mprotect_status);
 
 #ifdef PAX_SYSCTLS
 SYSCTL_DECL(_hardening_pax);
-
-/*
- * sysctls
- */
-static int sysctl_pax_pageexec_status(SYSCTL_HANDLER_ARGS);
-static int sysctl_pax_mprotect_status(SYSCTL_HANDLER_ARGS);
-
 SYSCTL_NODE(_hardening_pax, OID_AUTO, pageexec, CTLFLAG_RD, 0,
     "Remove WX pages from user-space.");
-
-SYSCTL_PROC(_hardening_pax_pageexec, OID_AUTO, status,
-    CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON|CTLFLAG_SECURE,
-    NULL, 0, sysctl_pax_pageexec_status, "I",
-    "Restrictions status. "
-    "0 - disabled, "
-    "1 - opt-in,  "
-    "2 - opt-out, "
-    "3 - force enabled");
-
-static int
-sysctl_pax_pageexec_status(SYSCTL_HANDLER_ARGS)
-{
-	struct prison *pr;
-	int err, val;
-
-	pr = pax_get_prison_td(req->td);
-
-	val = pr->pr_hardening.hr_pax_pageexec_status;
-	err = sysctl_handle_int(oidp, &val, sizeof(int), req);
-	if (err || (req->newptr == NULL))
-		return (err);
-
-	switch (val) {
-	case PAX_FEATURE_DISABLED:
-		printf("PAX MPROTECT depend on PAGEEXEC!\n");
-		if (pr == &prison0)
-			pax_mprotect_status = val;
-
-		pr->pr_hardening.hr_pax_mprotect_status = val;
-		/* FALLTHROUGH */
-	case PAX_FEATURE_OPTIN:
-	case PAX_FEATURE_OPTOUT:
-	case PAX_FEATURE_FORCE_ENABLED:
-		if (pr == &prison0)
-			pax_pageexec_status = val;
-
-		pr->pr_hardening.hr_pax_pageexec_status = val;
-		break;
-	default:
-		return (EINVAL);
-	}
-
-	return (0);
-}
-
 SYSCTL_NODE(_hardening_pax, OID_AUTO, mprotect, CTLFLAG_RD, 0,
     "MPROTECT hardening - enforce W^X.");
 
-SYSCTL_PROC(_hardening_pax_mprotect, OID_AUTO, status,
-    CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON|CTLFLAG_SECURE,
-    NULL, 0, sysctl_pax_mprotect_status, "I",
-    "Restrictions status. "
-    "0 - disabled, "
-    "1 - opt-in,  "
-    "2 - opt-out, "
-    "3 - force enabled");
+SYSCTL_HBSD_4STATE(pax_pageexec_status, pr_hbsd.noexec.pageexec_status,
+    _hardening_pax_pageexec, status,
+    CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON|CTLFLAG_SECURE);
 
-static int
-sysctl_pax_mprotect_status(SYSCTL_HANDLER_ARGS)
-{
-	struct prison *pr;
-	int err, val;
+SYSCTL_HBSD_4STATE(pax_mprotect_status, pr_hbsd.noexec.mprotect_status,
+    _hardening_pax_mprotect, status,
+    CTLTYPE_INT|CTLFLAG_RWTUN|CTLFLAG_PRISON|CTLFLAG_SECURE);
 
-	pr = pax_get_prison_td(req->td);
-
-	val = pr->pr_hardening.hr_pax_mprotect_status;
-	err = sysctl_handle_int(oidp, &val, sizeof(int), req);
-	if (err || (req->newptr == NULL))
-		return (err);
-
-	switch (val) {
-	case PAX_FEATURE_DISABLED:
-	case PAX_FEATURE_OPTIN:
-	case PAX_FEATURE_OPTOUT:
-	case PAX_FEATURE_FORCE_ENABLED:
-		if (pr == &prison0)
-			pax_mprotect_status = val;
-
-		pr->pr_hardening.hr_pax_mprotect_status = val;
-		break;
-	default:
-		return (EINVAL);
-	}
-
-	return (0);
-}
 #endif /* PAX_SYSCTLS */
 
 
@@ -219,31 +134,35 @@ pax_noexec_init_prison(struct prison *pr)
 
 	if (pr == &prison0) {
 		/* prison0 has no parent, use globals */
-		pr->pr_hardening.hr_pax_pageexec_status = pax_pageexec_status;
-		pr->pr_hardening.hr_pax_mprotect_status = pax_mprotect_status;
+		pr->pr_hbsd.noexec.pageexec_status = pax_pageexec_status;
+		pr->pr_hbsd.noexec.mprotect_status = pax_mprotect_status;
 	} else {
 		KASSERT(pr->pr_parent != NULL,
 		   ("%s: pr->pr_parent == NULL", __func__));
 		pr_p = pr->pr_parent;
 
-		pr->pr_hardening.hr_pax_pageexec_status =
-		    pr_p->pr_hardening.hr_pax_pageexec_status;
-		pr->pr_hardening.hr_pax_mprotect_status =
-		    pr_p->pr_hardening.hr_pax_mprotect_status;
+		pr->pr_hbsd.noexec.pageexec_status =
+		    pr_p->pr_hbsd.noexec.pageexec_status;
+		pr->pr_hbsd.noexec.mprotect_status =
+		    pr_p->pr_hbsd.noexec.mprotect_status;
 	}
 }
 
-u_int
-pax_pageexec_setup_flags(struct image_params *imgp, u_int mode)
+pax_flag_t
+pax_pageexec_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mode)
 {
 	struct prison *pr;
-	u_int flags, status;
+	pax_flag_t flags;
+	u_int status;
+
+	KASSERT(imgp->proc == td->td_proc,
+	    ("%s: imgp->proc != td->td_proc", __func__));
 
 	flags = 0;
 	status = 0;
 
-	pr = pax_get_prison(imgp->proc);
-	status = pr->pr_hardening.hr_pax_pageexec_status;
+	pr = pax_get_prison_td(td);
+	status = pr->pr_hbsd.noexec.pageexec_status;
 
 	if (status == PAX_FEATURE_DISABLED) {
 		flags &= ~PAX_NOTE_PAGEEXEC;
@@ -296,10 +215,10 @@ pax_pageexec_setup_flags(struct image_params *imgp, u_int mode)
  * PAGEEXEC
  */
 
-int
+bool
 pax_pageexec_active(struct proc *p)
 {
-	u_int flags;
+	pax_flag_t flags;
 
 	pax_get_flags(p, &flags);
 
@@ -337,10 +256,10 @@ pax_pageexec(struct proc *p, vm_prot_t *prot, vm_prot_t *maxprot)
  * MPROTECT
  */
 
-int
+bool
 pax_mprotect_active(struct proc *p)
 {
-	u_int flags;
+	pax_flag_t flags;
 
 	pax_get_flags(p, &flags);
 
@@ -356,17 +275,18 @@ pax_mprotect_active(struct proc *p)
 	return (true);
 }
 
-u_int
-pax_mprotect_setup_flags(struct image_params *imgp, u_int mode)
+pax_flag_t
+pax_mprotect_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mode)
 {
 	struct prison *pr;
-	u_int flags, status;
+	pax_flag_t flags;
+	uint32_t status;
 
 	flags = 0;
 	status = 0;
 
-	pr = pax_get_prison(imgp->proc);
-	status = pr->pr_hardening.hr_pax_mprotect_status;
+	pr = pax_get_prison_td(td);
+	status = pr->pr_hbsd.noexec.mprotect_status;
 
 	if (status == PAX_FEATURE_DISABLED) {
 		flags &= ~PAX_NOTE_MPROTECT;
@@ -384,8 +304,8 @@ pax_mprotect_setup_flags(struct image_params *imgp, u_int mode)
 
 	if (status == PAX_FEATURE_OPTIN) {
 		if (mode & PAX_NOTE_MPROTECT) {
-			flags |= PAX_NOTE_MPROTECT;
-			flags &= ~PAX_NOTE_NOMPROTECT;
+			flags |= (PAX_NOTE_MPROTECT | PAX_NOTE_PAGEEXEC);
+			flags &= ~(PAX_NOTE_NOMPROTECT | PAX_NOTE_NOPAGEEXEC);
 		} else {
 			flags &= ~PAX_NOTE_MPROTECT;
 			flags |= PAX_NOTE_NOMPROTECT;
@@ -399,8 +319,8 @@ pax_mprotect_setup_flags(struct image_params *imgp, u_int mode)
 			flags &= ~PAX_NOTE_MPROTECT;
 			flags |= PAX_NOTE_NOMPROTECT;
 		} else {
-			flags |= PAX_NOTE_MPROTECT;
-			flags &= ~PAX_NOTE_NOMPROTECT;
+			flags |= (PAX_NOTE_MPROTECT | PAX_NOTE_PAGEEXEC);
+			flags &= ~(PAX_NOTE_NOMPROTECT | PAX_NOTE_NOPAGEEXEC);
 		}
 
 		return (flags);
@@ -419,29 +339,30 @@ void
 pax_mprotect(struct proc *p, vm_prot_t *prot, vm_prot_t *maxprot)
 {
 
-	if (!pax_mprotect_active(p)) {
+	if (!pax_mprotect_active(p))
 		return;
-	}
 
 	CTR3(KTR_PAX, "%s: pid = %d maxprot = %x",
 	    __func__, p->p_pid, *maxprot);
 
-	if ((*maxprot & (VM_PROT_WRITE|VM_PROT_EXECUTE)) != VM_PROT_EXECUTE) {
+	if ((*maxprot & (VM_PROT_WRITE|VM_PROT_EXECUTE)) != VM_PROT_EXECUTE)
 		*maxprot &= ~VM_PROT_EXECUTE;
-	} else {
+	else
 		*maxprot &= ~VM_PROT_WRITE;
-	}
 }
 
 int
-pax_mprotect_enforce(struct proc *p, vm_prot_t old_prot, vm_prot_t new_prot)
+pax_mprotect_enforce(struct proc *p, vm_map_t map, vm_prot_t old_prot, vm_prot_t new_prot)
 {
+
 	if (!pax_mprotect_active(p))
 		return (0);
 
 	if ((new_prot & VM_PROT_EXECUTE) == VM_PROT_EXECUTE &&
 	    ((old_prot & VM_PROT_EXECUTE) != VM_PROT_EXECUTE)) {
-
+		pax_log_mprotect(p, PAX_LOG_P_COMM,
+		    "prevented to introduce new RWX page...");
+		vm_map_unlock(map);
 		return (KERN_PROTECTION_FAILURE);
 	}
 
@@ -467,12 +388,11 @@ pax_noexec_nx(struct proc *p, vm_prot_t *prot, vm_prot_t *maxprot)
 	CTR4(KTR_PAX, "%s: before - pid = %d prot = %x maxprot = %x",
 	    __func__, p->p_pid, *prot, *maxprot);
 
-	if (!pax_pageexec_active(p)) {
+	if (pax_pageexec_active(p)) {
 		*prot &= ~VM_PROT_EXECUTE;
 
-		if (!pax_mprotect_active(p)) {
+		if (pax_mprotect_active(p))
 			*maxprot &= ~VM_PROT_EXECUTE;
-		}
 	}
 
 	CTR4(KTR_PAX, "%s: after - pid = %d prot = %x maxprot = %x",
@@ -497,12 +417,11 @@ pax_noexec_nw(struct proc *p, vm_prot_t *prot, vm_prot_t *maxprot)
 	CTR4(KTR_PAX, "%s: before - pid = %d prot = %x maxprot = %x",
 	    __func__, p->p_pid, *prot, *maxprot);
 
-	if (!pax_pageexec_active(p)) {
+	if (pax_pageexec_active(p)) {
 		*prot &= ~VM_PROT_WRITE;
 
-		if (!pax_mprotect_active(p)) {
+		if (pax_mprotect_active(p))
 			*maxprot &= ~VM_PROT_WRITE;
-		}
 	}
 
 	CTR4(KTR_PAX, "%s: after - pid = %d prot = %x maxprot = %x",

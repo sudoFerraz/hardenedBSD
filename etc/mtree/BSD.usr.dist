@@ -497,6 +497,12 @@
         info
         ..
         keys
+            hbsd-update
+                revoked
+                ..
+                trusted
+                ..
+            ..
             pkg
                 revoked
                 ..

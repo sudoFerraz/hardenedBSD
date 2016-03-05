@@ -1,3 +1,37 @@
+[20150213] rewritten internals
+__HardenedBSD_version = 41
+
+	Changed hardenedBSD core structures.
+	Dropped ptrace_hardening.
+	Dropped ASLR bit settings.
+	Fixed hbsd_update_build bug.
+	Added skeleton file.
+	Changed feature strings.
+	Changed noexec implicit rules.
+
+
+[20150123] add pax_get_hardenedbsd_version API
+__HardenedBSD_version = 40
+
+	Add pax_get_hardenedbsd_version() API to query hardening's version
+	from kernel codes.
+
+	Add new types, which represents the PAX_FLAGS.
+
+
+[20151225] redo rework internal structures
+__HardenedBSD_version = 39
+
+	Change pax_get_prison(...) to pax_get_prison_td(...) where possible.
+	Fix one segvguard related issue.
+	Changed pax_elf signature.
+
+	We reverted this code in version 37, because we observed weird
+	issue, but this issues was unrelated to the reworked internals.
+	The true root of the problem was a secadm bug and the issue fixed
+	with version 38.
+
+
 [20151218] reworked MAP_32BIT mmap randomization
 __HardenedBSD_version = 38
 
