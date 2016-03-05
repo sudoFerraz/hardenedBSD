@@ -51,6 +51,7 @@ MAN=	aac.4 \
 	${_aout.4} \
 	${_apic.4} \
 	arcmsr.4 \
+	aslr.4 \
 	${_asmc.4} \
 	asr.4 \
 	ata.4 \
@@ -165,6 +166,7 @@ MAN=	aac.4 \
 	gpioled.4 \
 	gre.4 \
 	h_ertt.4 \
+	hardening.4 \
 	hatm.4 \
 	hifn.4 \
 	hme.4 \

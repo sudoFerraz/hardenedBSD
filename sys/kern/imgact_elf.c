@@ -34,6 +34,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_capsicum.h"
 #include "opt_compat.h"
 #include "opt_core.h"
+#include "opt_pax.h"
 
 #include <sys/param.h>
 #include <sys/capsicum.h>
@@ -48,6 +49,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/mount.h>
 #include <sys/mman.h>
 #include <sys/namei.h>
+#include <sys/pax.h>
 #include <sys/pioctl.h>
 #include <sys/proc.h>
 #include <sys/procfs.h>
@@ -131,14 +133,6 @@ int __elfN(nxstack) =
 SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
     nxstack, CTLFLAG_RW, &__elfN(nxstack), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) ": enable non-executable stack");
-
-#if __ELF_WORD_SIZE == 32
-#if defined(__amd64__) || defined(__ia64__)
-int i386_read_exec = 0;
-SYSCTL_INT(_kern_elf32, OID_AUTO, read_exec, CTLFLAG_RW, &i386_read_exec, 0,
-    "enable execution from readable segments");
-#endif
-#endif
 
 static Elf_Brandinfo *elf_brand_list[MAX_BRANDS];
 
@@ -852,16 +846,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 			error = ENOEXEC;
 			goto ret;
 		}
-		/*
-		 * Honour the base load address from the dso if it is
-		 * non-zero for some reason.
-		 */
-		if (baddr == 0)
-			et_dyn_addr = ET_DYN_LOAD_ADDR;
-		else
-			et_dyn_addr = 0;
-	} else
-		et_dyn_addr = 0;
+	}
 	sv = brand_info->sysvec;
 	if (interp != NULL && brand_info->interp_newpath != NULL)
 		newinterp = brand_info->interp_newpath;
@@ -881,6 +866,20 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 
 	error = exec_new_vmspace(imgp, sv);
 	imgp->proc->p_sysent = sv;
+
+	et_dyn_addr = 0;
+	if (hdr->e_type == ET_DYN) {
+		/*
+		 * Honour the base load address from the dso if it is
+		 * non-zero for some reason.
+		 */
+		if (baddr == 0) {
+			et_dyn_addr = ET_DYN_LOAD_ADDR;
+#ifdef PAX_ASLR
+			pax_aslr_execbase(imgp->proc, &et_dyn_addr);
+#endif
+		}
+	}
 
 	vn_lock(imgp->vp, LK_EXCLUSIVE | LK_RETRY);
 	if (error != 0)
@@ -987,6 +986,9 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	 */
 	addr = round_page((vm_offset_t)vmspace->vm_daddr + lim_max(imgp->proc,
 	    RLIMIT_DATA));
+#ifdef PAX_ASLR
+	pax_aslr_rtld(imgp->proc, &addr);
+#endif
 	PROC_UNLOCK(imgp->proc);
 
 	imgp->entry_addr = entry;
@@ -1038,6 +1040,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	elf_auxargs->base = addr;
 	elf_auxargs->flags = 0;
 	elf_auxargs->entry = entry;
+	elf_auxargs->pax_flags = imgp->proc->p_pax;
 
 	imgp->auxargs = elf_auxargs;
 	imgp->interpreted = 0;
@@ -1070,6 +1073,7 @@ __elfN(freebsd_fixup)(register_t **stack_base, struct image_params *imgp)
 	AUXARGS_ENTRY(pos, AT_FLAGS, args->flags);
 	AUXARGS_ENTRY(pos, AT_ENTRY, args->entry);
 	AUXARGS_ENTRY(pos, AT_BASE, args->base);
+	AUXARGS_ENTRY(pos, AT_PAXFLAGS, args->pax_flags);
 	if (imgp->execpathp != 0)
 		AUXARGS_ENTRY(pos, AT_EXECPATH, imgp->execpathp);
 	AUXARGS_ENTRY(pos, AT_OSRELDATE,
@@ -1085,7 +1089,8 @@ __elfN(freebsd_fixup)(register_t **stack_base, struct image_params *imgp)
 	}
 	if (imgp->sysent->sv_timekeep_base != 0) {
 		AUXARGS_ENTRY(pos, AT_TIMEKEEP,
-		    imgp->sysent->sv_timekeep_base);
+		    imgp->proc->p_shared_page_base +
+		    imgp->sysent->sv_timekeep_off);
 	}
 	AUXARGS_ENTRY(pos, AT_STACKPROT, imgp->sysent->sv_shared_page_obj
 	    != NULL && imgp->stack_prot != 0 ? imgp->stack_prot :
@@ -2108,9 +2113,9 @@ __elfN(note_procstat_psstrings)(void *arg, struct sbuf *sb, size_t *sizep)
 		KASSERT(*sizep == size, ("invalid size"));
 		structsize = sizeof(ps_strings);
 #if defined(COMPAT_FREEBSD32) && __ELF_WORD_SIZE == 32
-		ps_strings = PTROUT(p->p_sysent->sv_psstrings);
+		ps_strings = PTROUT(p->p_psstrings);
 #else
-		ps_strings = p->p_sysent->sv_psstrings;
+		ps_strings = p->p_psstrings;
 #endif
 		sbuf_bcat(sb, &structsize, sizeof(structsize));
 		sbuf_bcat(sb, &ps_strings, sizeof(ps_strings));
@@ -2318,12 +2323,6 @@ __elfN(trans_prot)(Elf_Word flags)
 		prot |= VM_PROT_WRITE;
 	if (flags & PF_R)
 		prot |= VM_PROT_READ;
-#if __ELF_WORD_SIZE == 32
-#if defined(__amd64__) || defined(__ia64__)
-	if (i386_read_exec && (flags & PF_R))
-		prot |= VM_PROT_EXECUTE;
-#endif
-#endif
 	return (prot);
 }
 

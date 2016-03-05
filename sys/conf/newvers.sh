@@ -36,6 +36,7 @@ BRANCH="RC1"
 if [ "X${BRANCH_OVERRIDE}" != "X" ]; then
 	BRANCH=${BRANCH_OVERRIDE}
 fi
+BRANCH="${BRANCH}-HBSD"
 RELEASE="${REVISION}-${BRANCH}"
 VERSION="${TYPE} ${RELEASE}"
 
@@ -214,10 +215,14 @@ if [ -n "$hg_cmd" ] ; then
 	fi
 fi
 
+if [ -n "${HBSD_EXTRA}" ] ; then
+	hbsdv=" [${HBSD_EXTRA}]"
+fi
+
 cat << EOF > vers.c
 $COPYRIGHT
-#define SCCSSTR "@(#)${VERSION} #${v}${svn}${git}${hg}${p4version}: ${t}"
-#define VERSTR "${VERSION} #${v}${svn}${git}${hg}${p4version}: ${t}\\n    ${u}@${h}:${d}\\n"
+#define SCCSSTR "@(#)${VERSION} #${v}${hbsdv}${svn}${git}${hg}${p4version}: ${t}"
+#define VERSTR "${VERSION} #${v}${hbsdv}${svn}${git}${hg}${p4version}: ${t}\\n    ${u}@${h}:${d}\\n"
 #define RELSTR "${RELEASE}"
 
 char sccs[sizeof(SCCSSTR) > 128 ? sizeof(SCCSSTR) : 128] = SCCSSTR;

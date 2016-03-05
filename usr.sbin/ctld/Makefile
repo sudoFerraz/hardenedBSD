@@ -10,6 +10,8 @@ CFLAGS+=	-I${.CURDIR}/../../sys/dev/iscsi
 #CFLAGS+=	-DICL_KERNEL_PROXY
 MAN=		ctld.8 ctl.conf.5
 
+WANTS_PIE=	yes
+
 DPADD=		${LIBBSDXML} ${LIBL} ${LIBMD} ${LIBSBUF} ${LIBUTIL}
 LDADD=		-lbsdxml -ll -lmd -lsbuf -lutil
 

@@ -33,6 +33,7 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 #include "opt_compat.h"
+#include "opt_pax.h"
 
 #ifndef COMPAT_FREEBSD32
 #error "Unable to compile Linux-emulator due to missing COMPAT_FREEBSD32 option!"
@@ -51,6 +52,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/malloc.h>
 #include <sys/module.h>
 #include <sys/mutex.h>
+#include <sys/pax.h>
 #include <sys/proc.h>
 #include <sys/resourcevar.h>
 #include <sys/signalvar.h>
@@ -236,6 +238,8 @@ elf_linux_fixup(register_t **stack_base, struct image_params *imgp)
 
 	KASSERT(curthread->td_proc == imgp->proc,
 	    ("unsafe elf_linux_fixup(), should be curproc"));
+
+	arginfo = (struct linux32_ps_strings *)imgp->proc->p_psstrings;
 	base = (Elf32_Addr *)*stack_base;
 	args = (Elf32_Auxargs *)imgp->auxargs;
 	pos = base + (imgp->args->argc + imgp->args->envc + 2);
@@ -1032,7 +1036,7 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_maxuser	= LINUX32_MAXUSER,
 	.sv_usrstack	= LINUX32_USRSTACK,
 	.sv_psstrings	= LINUX32_PS_STRINGS,
-	.sv_stackprot	= VM_PROT_ALL,
+	.sv_stackprot	= VM_PROT_READ | VM_PROT_WRITE,
 	.sv_copyout_strings = linux_copyout_strings,
 	.sv_setregs	= exec_linux_setregs,
 	.sv_fixlimit	= linux32_fixlimit,
@@ -1046,6 +1050,7 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_schedtail	= linux_schedtail,
 	.sv_thread_detach = linux_thread_detach,
 	.sv_trap	= NULL,	
+	.sv_pax_aslr_init = pax_aslr_init_vmspace32,
 };
 
 static void

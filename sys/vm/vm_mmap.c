@@ -45,6 +45,7 @@ __FBSDID("$FreeBSD$");
 
 #include "opt_compat.h"
 #include "opt_hwpmc_hooks.h"
+#include "opt_pax.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,6 +55,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/mutex.h>
 #include <sys/sysproto.h>
 #include <sys/filedesc.h>
+#include <sys/pax.h>
 #include <sys/priv.h>
 #include <sys/proc.h>
 #include <sys/procctl.h>
@@ -211,6 +213,9 @@ sys_mmap(td, uap)
 	off_t pos;
 	struct vmspace *vms = td->td_proc->p_vmspace;
 	cap_rights_t rights;
+#ifdef PAX_ASLR
+	int pax_aslr_done;
+#endif
 
 	addr = (vm_offset_t) uap->addr;
 	size = uap->len;
@@ -219,6 +224,10 @@ sys_mmap(td, uap)
 	pos = uap->pos;
 
 	fp = NULL;
+
+#ifdef PAX_ASLR
+	pax_aslr_done = 0;
+#endif
 
 	/*
 	 * Enforce the constraints.
@@ -229,14 +238,9 @@ sys_mmap(td, uap)
 	 * ld.so sometimes issues anonymous map requests with non-zero
 	 * pos.
 	 */
-	if (!SV_CURPROC_FLAG(SV_AOUT)) {
-		if ((uap->len == 0 && curproc->p_osrel >= P_OSREL_MAP_ANON) ||
-		    ((flags & MAP_ANON) != 0 && (uap->fd != -1 || pos != 0)))
-			return (EINVAL);
-	} else {
-		if ((flags & MAP_ANON) != 0)
-			pos = 0;
-	}
+	if ((uap->len == 0 && curproc->p_osrel >= P_OSREL_MAP_ANON) ||
+	    ((flags & MAP_ANON) != 0 && (uap->fd != -1 || pos != 0)))
+		return (EINVAL);
 
 	if (flags & MAP_STACK) {
 		if ((uap->fd != -1) ||
@@ -265,6 +269,11 @@ sys_mmap(td, uap)
 	    (align >> MAP_ALIGNMENT_SHIFT >= sizeof(void *) * NBBY ||
 	    align >> MAP_ALIGNMENT_SHIFT < PAGE_SHIFT))
 		return (EINVAL);
+
+#if defined(MAP_32BIT) && defined(PAX_HARDENING)
+	if (pax_disallow_map32bit_active(td, flags))
+		return (EPERM);
+#endif
 
 	/*
 	 * Check for illegal addresses.  Watch out for address wrap... Note
@@ -297,7 +306,13 @@ sys_mmap(td, uap)
 		 */
 		if (addr + size > MAP_32BIT_MAX_ADDR)
 			addr = 0;
-#endif
+#ifdef PAX_ASLR
+		PROC_LOCK(td->td_proc);
+		pax_aslr_mmap_map_32bit(td->td_proc, &addr, (vm_offset_t)uap->addr, flags);
+		pax_aslr_done = 1;
+		PROC_UNLOCK(td->td_proc);
+#endif /* PAX_ASLR */
+#endif /* MAP_32BIT */
 	} else {
 		/*
 		 * XXX for non-fixed mappings where no hint is provided or
@@ -314,6 +329,10 @@ sys_mmap(td, uap)
 		    lim_max(td->td_proc, RLIMIT_DATA))))
 			addr = round_page((vm_offset_t)vms->vm_daddr +
 			    lim_max(td->td_proc, RLIMIT_DATA));
+#ifdef PAX_ASLR
+		pax_aslr_mmap(td->td_proc, &addr, (vm_offset_t)uap->addr, flags);
+		pax_aslr_done = 1;
+#endif
 		PROC_UNLOCK(td->td_proc);
 	}
 	if (flags & MAP_ANON) {
@@ -416,6 +435,14 @@ sys_mmap(td, uap)
 map:
 	td->td_fpop = fp;
 	maxprot &= cap_maxprot;
+#ifdef PAX_NOEXEC
+	pax_pageexec(td->td_proc, &prot, &maxprot);
+	pax_mprotect(td->td_proc, &prot, &maxprot);
+#endif
+#ifdef PAX_ASLR
+	KASSERT((flags & MAP_FIXED) == MAP_FIXED || pax_aslr_done == 1,
+	    ("%s: ASLR reqiured ...", __func__));
+#endif
 	error = vm_mmap(&vms->vm_map, &addr, size, prot, maxprot,
 	    flags, handle_type, handle, pos);
 	td->td_fpop = NULL;
@@ -487,13 +514,6 @@ ommap(td, uap)
 	nargs.addr = uap->addr;
 	nargs.len = uap->len;
 	nargs.prot = cvtbsdprot[uap->prot & 0x7];
-#ifdef COMPAT_FREEBSD32
-#if defined(__amd64__) || defined(__ia64__)
-	if (i386_read_exec && SV_PROC_FLAG(td->td_proc, SV_ILP32) &&
-	    nargs.prot != 0)
-		nargs.prot |= PROT_EXEC;
-#endif
-#endif
 	nargs.flags = 0;
 	if (uap->flags & OMAP_ANON)
 		nargs.flags |= MAP_ANON;

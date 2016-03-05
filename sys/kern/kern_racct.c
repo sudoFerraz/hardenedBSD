@@ -78,8 +78,16 @@ int racct_enable = 1;
 #endif
 
 SYSCTL_NODE(_kern, OID_AUTO, racct, CTLFLAG_RW, 0, "Resource Accounting");
+/*
+ * XXXOP 1
+ *
+ * force conflict in git, to prevent the changing of this tunable as RW
+ *
+ * More details under this link:
+ * https://reviews.freebsd.org/D2369#inline-15370
+ */
 TUNABLE_INT("kern.racct.enable", &racct_enable);
-SYSCTL_UINT(_kern_racct, OID_AUTO, enable, CTLFLAG_RDTUN, &racct_enable,
+SYSCTL_UINT(_kern_racct, OID_AUTO, enable, CTLFLAG_RDTUN/*XXXOP 1*/, &racct_enable,
     0, "Enable RACCT/RCTL");
 SYSCTL_UINT(_kern_racct, OID_AUTO, pcpu_threshold, CTLFLAG_RW, &pcpu_threshold,
     0, "Processes with higher %cpu usage than this value can be throttled.");

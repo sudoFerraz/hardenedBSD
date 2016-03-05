@@ -12,12 +12,6 @@
     include
     ..
     lib
-        aout
-        ..
-        compat
-            aout
-            ..
-        ..
         dtrace
         ..
         engines
@@ -337,8 +331,6 @@
             ..
             hostapd
             ..
-            ibcs2
-            ..
             indent
             ..
             ipfilter
@@ -501,6 +493,12 @@
         info
         ..
         keys
+            hbsd-update
+                revoked
+                ..
+                trusted
+                ..
+            ..
             pkg
                 revoked
                 ..

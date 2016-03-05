@@ -42,6 +42,8 @@
 OLD_FILES+=usr/sbin/unbound-control-setup
 # 20151222: liblzma header
 OLD_FILES+=usr/include/lzma/lzma.h
+# 20151120: remove unused pkg repo public key
+OLD_FILES+=usr/share/keys/pkg/trusted/hardenedbsd.crt.2014-09-04
 # 20151115: added missing _test suffix on multiple tests in lib/libc
 OLD_FILES+=usr/tests/lib/libc/c063/faccessat
 OLD_FILES+=usr/tests/lib/libc/c063/fchmodat
@@ -89,6 +91,10 @@ OLD_FILES+=usr/include/netinet6/in6_gif.h
 OLD_FILES+=usr/tests/sbin/mdconfig/legacy_test
 OLD_FILES+=usr/tests/sbin/mdconfig/mdconfig.test
 OLD_FILES+=usr/tests/sbin/mdconfig/run.pl
+# 20141204 ibcs support removal
+OLD_FILES+=etc/rc.d/archdep
+OLD_FILES+=shate/examples/ibcs2/README
+OLD_FILES+=shate/examples/ibcs2/hello.uu
 # 20141107: overhaul if_gre(4)
 OLD_FILES+=usr/include/netinet/ip_gre.h
 # 20141028: debug files accidentally installed as directory name

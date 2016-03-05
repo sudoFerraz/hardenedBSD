@@ -9,6 +9,7 @@ MAN=	bhyvectl.8
 
 DPADD=	${LIBVMMAPI} ${LIBUTIL}
 LDADD=	-lvmmapi -lutil
+WANTS_PIE=	yes
 
 WARNS?=	3
 

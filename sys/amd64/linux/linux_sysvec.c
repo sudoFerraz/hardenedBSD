@@ -35,6 +35,7 @@
 __FBSDID("$FreeBSD$");
 
 #include "opt_compat.h"
+#include "opt_pax.h"
 
 #define	__ELF_WORD_SIZE	64
 
@@ -50,6 +51,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/malloc.h>
 #include <sys/module.h>
 #include <sys/mutex.h>
+#include <sys/pax.h>
 #include <sys/proc.h>
 #include <sys/resourcevar.h>
 #include <sys/signalvar.h>
@@ -819,7 +821,7 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_maxuser	= VM_MAXUSER_ADDRESS,
 	.sv_usrstack	= USRSTACK,
 	.sv_psstrings	= PS_STRINGS,
-	.sv_stackprot	= VM_PROT_ALL,
+	.sv_stackprot	= VM_PROT_READ | VM_PROT_WRITE,
 	.sv_copyout_strings = linux_copyout_strings,
 	.sv_setregs	= linux_exec_setregs,
 	.sv_fixlimit	= NULL,
@@ -833,6 +835,7 @@ struct sysentvec elf_linux_sysvec = {
 	.sv_schedtail	= linux_schedtail,
 	.sv_thread_detach = linux_thread_detach,
 	.sv_trap	= linux_vsyscall,
+	.sv_pax_aslr_init = pax_aslr_init_vmspace,
 };
 
 static void

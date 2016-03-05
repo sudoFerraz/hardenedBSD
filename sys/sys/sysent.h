@@ -38,6 +38,7 @@ struct rlimit;
 struct sysent;
 struct thread;
 struct ksiginfo;
+struct proc;
 
 typedef	int	sy_call_t(struct thread *, void *);
 
@@ -132,6 +133,7 @@ struct sysentvec {
 	void		(*sv_schedtail)(struct thread *);
 	void		(*sv_thread_detach)(struct thread *);
 	int		(*sv_trap)(struct thread *);
+	void		(* const sv_pax_aslr_init)(struct proc *p);
 };
 
 #define	SV_ILP32	0x000100
@@ -151,15 +153,10 @@ struct sysentvec {
 #define	SV_ABI_UNDEF	255
 
 #ifdef _KERNEL
-extern struct sysentvec aout_sysvec;
 extern struct sysentvec elf_freebsd_sysvec;
 extern struct sysentvec null_sysvec;
 extern struct sysent sysent[];
 extern const char *syscallnames[];
-
-#if defined(__amd64__) || defined(__ia64__)
-extern int i386_read_exec;
-#endif
 
 #define	NO_SYSCALL (-1)
 

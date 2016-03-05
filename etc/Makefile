@@ -94,6 +94,10 @@ BIN1+= freebsd-update.conf
 BIN1+= ftpusers
 .endif
 
+.if ${MK_HBSD_UPDATE} != "no"
+BIN1+= hbsd-update.conf
+.endif
+
 .if ${MK_INETD} != "no"
 BIN1+= inetd.conf
 .endif
