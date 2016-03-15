@@ -49,7 +49,6 @@ SRCS+=	__getosreldate.c \
 	fstab.c \
 	ftok.c \
 	fts.c \
-	fts-compat.c \
 	ftw.c \
 	getbootfile.c \
 	getbsize.c \
@@ -139,7 +138,6 @@ SRCS+=	__getosreldate.c \
 	ualarm.c \
 	ulimit.c \
 	uname.c \
-	unvis-compat.c \
 	usleep.c \
 	utime.c \
 	utxdb.c \
@@ -149,6 +147,10 @@ SRCS+=	__getosreldate.c \
 	waitpid.c \
 	waitid.c \
 	wordexp.c
+.if ${MK_SYMVER} == yes
+SRCS+=	fts-compat.c \
+	unvis-compat.c
+.endif
 
 .PATH: ${LIBC_SRCTOP}/../../contrib/libc-pwcache
 SRCS+=	pwcache.c pwcache.h
