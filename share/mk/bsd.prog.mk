@@ -12,14 +12,6 @@
 CFLAGS+=${COPTS}
 .endif
 
-.if defined(WANTS_PIE)
-.if ${MK_PIE} != "no"
-CFLAGS+= -fPIE
-CXXFLAGS+= -fPIE
-LDFLAGS+= -pie
-.endif
-.endif
-
 .if ${MK_ASSERT_DEBUG} == "no"
 CFLAGS+= -DNDEBUG
 NO_WERROR=
@@ -58,6 +50,15 @@ STRIP?=	-s
 
 .if defined(NO_SHARED) && (${NO_SHARED} != "no" && ${NO_SHARED} != "NO")
 LDFLAGS+= -static
+NOPIE= yes
+.endif
+
+.if !defined(NOPIE)
+.if ${MK_PIE} != "no"
+CFLAGS+= -fPIE
+CXXFLAGS+= -fPIE
+LDFLAGS+= -pie
+.endif
 .endif
 
 .if ${MK_DEBUG_FILES} != "no"
