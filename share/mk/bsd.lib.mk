@@ -75,7 +75,9 @@ PICFLAG=-fpic
 
 .if !defined(NO_PIC)
 .if ${MK_PIE} != "no"
+.if !defined(NOPIE)
 CFLAGS+= ${PICFLAG}
+.endif
 .endif
 .endif
 
