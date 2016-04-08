@@ -30,6 +30,12 @@
 .if !target(__<bsd.opts.mk>__)
 __<bsd.opts.mk>__:
 
+.if defined(TARGET_ARCH)
+__T=${TARGET_ARCH}
+.else
+__T=${MACHINE_ARCH}
+.endif
+
 .if !defined(_WITHOUT_SRCCONF)
 #
 # Define MK_* variables (which are either "yes" or "no") for users
@@ -60,7 +66,6 @@ __DEFAULT_YES_OPTIONS = \
     NIS \
     NLS \
     OPENSSH \
-    PIE \
     PROFILE \
     SSP \
     SYMVER \
@@ -78,6 +83,11 @@ __DEFAULT_DEPENDENT_OPTIONS = \
     STAGING_MAN/STAGING \
     STAGING_PROG/STAGING \
 
+.if ${__T} == "amd64" || ${__T} == "i386"
+__DEFAULT_YES_OPTIONS+=PIE
+.else
+__DEFAULT_NO_OPTIONS+=PIE
+.endif
 
 .include <bsd.mkopt.mk>
 
