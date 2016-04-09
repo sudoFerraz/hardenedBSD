@@ -50,7 +50,10 @@ STRIP?=	-s
 
 .if defined(NO_SHARED) && (${NO_SHARED} != "no" && ${NO_SHARED} != "NO")
 LDFLAGS+= -static
-NOPIE= yes
+.endif
+
+.if ${LDFLAGS:M-static}
+NOPIE=yes
 .endif
 
 .if !defined(NOPIE)
