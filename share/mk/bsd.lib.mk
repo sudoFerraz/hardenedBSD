@@ -73,6 +73,14 @@ PICFLAG=-fpic
 .endif
 .endif
 
+.if !defined(NO_PIC)
+.if ${MK_PIE} != "no"
+.if !defined(NOPIE)
+CFLAGS+= ${PICFLAG}
+.endif
+.endif
+.endif
+
 PO_FLAG=-pg
 
 .c.o:
