@@ -52,6 +52,10 @@ STRIP?=	-s
 LDFLAGS+= -static
 .endif
 
+.if defined(MK_PIE)
+# Ports will not have MK_PIE defined and the following logic requires
+# it be defined.
+
 .if ${LDFLAGS:M-static}
 NOPIE=yes
 .endif
@@ -61,6 +65,7 @@ NOPIE=yes
 CFLAGS+= -fPIE
 CXXFLAGS+= -fPIE
 LDFLAGS+= -pie
+.endif
 .endif
 .endif
 
