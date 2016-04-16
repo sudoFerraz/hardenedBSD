@@ -2,7 +2,11 @@
 
 .include <src.opts.mk>
 
+<<<<<<< HEAD
 INSTALL_PIC_ARCHIVE=	yes
+=======
+PACKAGE=lib${LIB}
+>>>>>>> origin/hardened/current/master
 LIB=		mp
 SHLIB_MAJOR=	7
 LIBADD=		crypto
