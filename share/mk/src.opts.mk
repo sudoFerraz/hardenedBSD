@@ -54,6 +54,7 @@ __DEFAULT_YES_OPTIONS = \
     AUTHPF \
     AUTOFS \
     BHYVE \
+    BIND_NOW \
     BINUTILS \
     BINUTILS_BOOTSTRAP \
     BLUETOOTH \
@@ -145,11 +146,13 @@ __DEFAULT_YES_OPTIONS = \
     RCMDS \
     RBOOTD \
     RCS \
+    RELRO \
     RESCUE \
     ROUTED \
     SENDMAIL \
     SETUID_LOGIN \
     SHAREDOCS \
+    SHARED_TOOLCHAIN \
     SOURCELESS \
     SOURCELESS_HOST \
     SOURCELESS_UCODE \
@@ -186,7 +189,6 @@ __DEFAULT_NO_OPTIONS = \
     OFED \
     OPENLDAP \
     PORTSNAP \
-    SHARED_TOOLCHAIN \
     SORT_THREADS \
     SVN
 
@@ -254,6 +256,12 @@ BROKEN_OPTIONS+=LLDB
 # Only doing soft float API stuff on armv6
 .if ${__T} != "armv6"
 BROKEN_OPTIONS+=LIBSOFT
+.endif
+
+.if ${__T} == "amd64" || ${__T} == "i386" || ${__T} == "aarch64"
+__DEFAULT_YES_OPTIONS+=PIE
+.else
+__DEFAULT_NO_OPTIONS+=PIE
 .endif
 
 .include <bsd.mkopt.mk>

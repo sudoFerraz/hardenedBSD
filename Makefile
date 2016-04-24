@@ -127,7 +127,9 @@ TGTS=	all all-man buildenv buildenvvars buildkernel buildworld \
 	_build-tools _cross-tools _includes _libraries \
 	build32 distribute32 install32 buildsoft distributesoft installsoft \
 	builddtb xdev xdev-build xdev-install \
-	xdev-links native-xtools installconfig \
+	xdev-links native-xtools stageworld stagekernel stage-packages \
+	create-world-packages create-kernel-packages create-packages \
+	packages installconfig real-packages sign-packages package-pkg
 
 TGTS+=	${SUBDIR_TARGETS}
 
@@ -180,6 +182,15 @@ SUB_MAKE= ${MAKE} -m ${.CURDIR}/share/mk
 .endif
 
 _MAKE=	PATH=${PATH} ${SUB_MAKE} -f Makefile.inc1 TARGET=${_TARGET} TARGET_ARCH=${_TARGET_ARCH}
+
+# Must disable META_MODE when installing to avoid missing anything.  The
+# main problem is that buildworld will create cookies for install targets
+# since they are being installed into WORLDTMP.  This avoids unneeded and
+# redundant restaging but is dangerous for user install targets.
+.if make(distrib*) || make(*install*)
+_MAKE+=	MK_META_MODE=no
+.unexport META_MODE
+.endif
 
 # Guess machine architecture from machine type, and vice versa.
 .if !defined(TARGET_ARCH) && defined(TARGET)
