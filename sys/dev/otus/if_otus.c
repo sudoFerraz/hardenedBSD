@@ -62,7 +62,6 @@ __FBSDID("$FreeBSD$");
 #include <net80211/ieee80211_regdomain.h>
 #include <net80211/ieee80211_radiotap.h>
 #include <net80211/ieee80211_ratectl.h>
-#include <net80211/ieee80211_input.h>
 #ifdef	IEEE80211_SUPPORT_SUPERG
 #include <net80211/ieee80211_superg.h>
 #endif
@@ -625,7 +624,7 @@ otus_attachhook(struct otus_softc *sc)
 	struct ieee80211com *ic = &sc->sc_ic;
 	usb_device_request_t req;
 	uint32_t in, out;
-	uint8_t bands[howmany(IEEE80211_MODE_MAX, 8)];
+	uint8_t bands[IEEE80211_MODE_BYTES];
 	int error;
 
 	/* Not locked */
@@ -2307,7 +2306,7 @@ otus_set_multi(struct otus_softc *sc)
 				uint32_t val;
 
 				dl = LLADDR((struct sockaddr_dl *) ifma->ifma_addr);
-				val = LE_READ_4(dl + 4);
+				val = le32dec(dl + 4);
 				/* Get address byte 5 */
 				val = val & 0x0000ff00;
 				val = val >> 8;
