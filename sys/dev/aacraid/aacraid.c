@@ -2875,11 +2875,7 @@ aac_ioctl_send_raw_srb(struct aac_softc *sc, caddr_t arg)
 		struct aac_sg_entry *sgp = srbcmd->sg_map.SgEntry;
 		struct aac_sg_entry sg;
 
-<<<<<<< HEAD
-		if ((error = copyin(sgp, &sg, sizeof(sg))) != 0) 
-=======
 		if ((error = copyin(sgp, &sg, sizeof(sg))) != 0)
->>>>>>> origin/hardened/current/master
 			goto out;
 
 		srb_sg_bytecount = sg.SgByteCount;
@@ -2891,11 +2887,7 @@ aac_ioctl_send_raw_srb(struct aac_softc *sc, caddr_t arg)
 			(struct aac_sg_entry64 *)srbcmd->sg_map.SgEntry;
 		struct aac_sg_entry64 sg;
 
-<<<<<<< HEAD
-		if ((error = copyin(sgp, &sg, sizeof(sg))) != 0) 
-=======
 		if ((error = copyin(sgp, &sg, sizeof(sg))) != 0)
->>>>>>> origin/hardened/current/master
 			goto out;
 
 		srb_sg_bytecount = sg.SgByteCount;
