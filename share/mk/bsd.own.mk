@@ -333,6 +333,7 @@ __DEFAULT_YES_OPTIONS = \
     LEGACY_CONSOLE \
     LIBPTHREAD \
     LIBTHR \
+    LIBRESSL \
     LOCALES \
     LOCATE \
     LPR \
@@ -406,7 +407,6 @@ __DEFAULT_NO_OPTIONS = \
     HESIOD \
     INSTALL_AS_USER \
     LIB32 \
-    LIBRESSL \
     LLDB \
     NAND \
     OFED \
