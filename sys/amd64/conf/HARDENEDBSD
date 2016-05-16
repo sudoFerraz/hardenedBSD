@@ -89,6 +89,8 @@ options 	PAX_SEGVGUARD		# prevent brute-force attacks
 options 	HBSD_DEBUG
 options 	INVARIANTS		# Check and enforce proper kernel state.
 options 	INVARIANT_SUPPORT
+options 	DEADLKRES		# Enable the deadlock resolver
+
 
 # Debugging support.  Always need this:
 options 	KDB			# Enable kernel debugger support.
