@@ -103,7 +103,7 @@ kbd_realloc_array(void)
 	int s;
 
 	s = spltty();
-	newsize = ((keyboards + ARRAY_DELTA)/ARRAY_DELTA)*ARRAY_DELTA;
+	newsize = rounddown(keyboards + ARRAY_DELTA, ARRAY_DELTA);
 	new_kbd = malloc(sizeof(*new_kbd)*newsize, M_DEVBUF, M_NOWAIT|M_ZERO);
 	if (new_kbd == NULL) {
 		splx(s);
@@ -290,7 +290,7 @@ kbd_unregister(keyboard_t *kbd)
 	return (0);
 }
 
-/* find a funciton table by the driver name */
+/* find a function table by the driver name */
 keyboard_switch_t
 *kbd_get_switch(char *driver)
 {
@@ -1003,7 +1003,7 @@ genkbd_commonioctl(keyboard_t *kbd, u_long cmd, caddr_t arg)
 			splx(s);
 			return (error);
 		}
-		kbd->kb_fkeytab[fkeyp->keynum].len = imin(fkeyp->flen, MAXFK);
+		kbd->kb_fkeytab[fkeyp->keynum].len = min(fkeyp->flen, MAXFK);
 		bcopy(fkeyp->keydef, kbd->kb_fkeytab[fkeyp->keynum].str,
 		    kbd->kb_fkeytab[fkeyp->keynum].len);
 		break;

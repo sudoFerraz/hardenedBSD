@@ -49,7 +49,9 @@ SUBDIR=	\
 	${_auxio} \
 	${_bce} \
 	bfe \
+	bhnd \
 	bge \
+	bhnd \
 	${_bxe} \
 	${_bios} \
 	${_bktr} \
@@ -57,6 +59,7 @@ SUBDIR=	\
 	bridgestp \
 	bwi \
 	bwn \
+	bwn_pci \
 	cam \
 	${_canbepm} \
 	${_canbus} \
@@ -120,6 +123,7 @@ SUBDIR=	\
 	geom \
 	${_glxiic} \
 	${_glxsb} \
+	gpio \
 	hatm \
 	hifn \
 	hme \
@@ -167,6 +171,7 @@ SUBDIR=	\
 	${_ipw} \
 	${_ipwfw} \
 	${_isci} \
+	${_iser} \
 	isp \
 	${_ispfw} \
 	${_iwi} \
@@ -306,7 +311,6 @@ SUBDIR=	\
 	${_rdma} \
 	${_rdrand_rng} \
 	re \
-	reiserfs \
 	rl \
 	rtwn \
 	${_rtwnfw} \
@@ -547,6 +551,7 @@ _igb=		igb
 _io=		io
 .if ${MK_OFED} != "no" || defined(ALL_MODULES)
 _ipoib=         ipoib
+_iser=		iser
 .endif
 _ix=		ix
 _ixv=		ixv
@@ -761,7 +766,7 @@ SUBDIR:= ${SUBDIR:N${reject}}
 # Calling kldxref(8) for each module is expensive.
 .if !defined(NO_XREF)
 .MAKEFLAGS+=	-DNO_XREF
-afterinstall:
+afterinstall: .PHONY
 	@if type kldxref >/dev/null 2>&1; then \
 		${ECHO} kldxref ${DESTDIR}${KMODDIR}; \
 		kldxref ${DESTDIR}${KMODDIR}; \
