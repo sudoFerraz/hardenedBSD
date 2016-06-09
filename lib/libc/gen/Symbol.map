@@ -410,12 +410,9 @@ FBSD_1.3 {
 };
 
 FBSD_1.4 {
-<<<<<<< HEAD
 	getentropy;
 	getdtablecount;
-=======
 	getnetgrent_r;
->>>>>>> origin/hardened/current/master
 	pthread_mutex_consistent;
 	pthread_mutexattr_getrobust;
 	pthread_mutexattr_setrobust;
