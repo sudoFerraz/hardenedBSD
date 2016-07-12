@@ -1,4 +1,4 @@
-/* $OpenBSD: s3_pkt.c,v 1.57.2.1 2016/05/03 12:39:48 tedu Exp $ */
+/* $OpenBSD: s3_pkt.c,v 1.56 2015/07/24 02:39:43 doug Exp $ */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
