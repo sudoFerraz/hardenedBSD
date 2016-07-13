@@ -583,6 +583,18 @@ OLD_LIBS+=lib/libcrypto.so.7
 OLD_LIBS+=usr/lib/libssl.so.7
 OLD_LIBS+=usr/lib32/libcrypto.so.7
 OLD_LIBS+=usr/lib32/libssl.so.7
+# 20160716: Replace OpenSSL libs with LibreSSL
+OLD_LIBS+=lib/libcrypto.so.8
+OLD_LIBS+=usr/lib/libssl.so.8
+OLD_LIBS+=usr/lib32/libcrypto.so.8
+OLD_LIBS+=usr/lib32/libssl.so.8
+# 20160716: Delete LibreSSL 2.3 libs
+OLD_LIBS+=lib/libcrypto.so.37
+OLD_LIBS+=usr/lib/libssl.so.38
+OLD_LIBS+=usr/lib/libtols.so.10
+OLD_LIBS+=usr/lib32/libcrypto.so.37
+OLD_LIBS+=usr/lib32/libssl.so.38
+OLD_LIBS+=usr/lib32/libtls.so.10
 # 20151015: test symbols moved to /usr/lib/debug
 OLD_DIRS+=usr/tests/lib/atf/libatf-c++/.debug
 OLD_FILES+=usr/tests/lib/atf/libatf-c++/.debug/atf_c++_test.debug
