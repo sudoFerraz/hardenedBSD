@@ -3937,13 +3937,6 @@ OLD_LIBS+=lib/libcrypto.so.8
 OLD_LIBS+=usr/lib/libssl.so.8
 OLD_LIBS+=usr/lib32/libcrypto.so.8
 OLD_LIBS+=usr/lib32/libssl.so.8
-# 20160716: Delete LibreSSL 2.3 libs
-OLD_LIBS+=usr/lib/libcrypto.so.37
-OLD_LIBS+=usr/lib/libssl.so.38
-OLD_LIBS+=usr/lib/libtols.so.10
-OLD_LIBS+=usr/lib32/libcrypto.so.37
-OLD_LIBS+=usr/lib32/libssl.so.38
-OLD_LIBS+=usr/lib32/libtls.so.10
 .else
 OLD_FILES+=usr/share/openssl/man/man3/ASN1_OBJECT_new.3
 OLD_FILES+=usr/share/openssl/man/man3/ASN1_STRING_length.3
@@ -4152,13 +4145,6 @@ OLD_LIBS+=usr/lib/libtols.so.10
 OLD_LIBS+=usr/lib32/libcrypto.so.37
 OLD_LIBS+=usr/lib32/libssl.so.38
 OLD_LIBS+=usr/lib32/libtls.so.10
-# LibreSSL 2.4 libs
-OLD_LIBS+=usr/lib/libcrypto.so.38
-OLD_LIBS+=usr/lib/libssl.so.39
-OLD_LIBS+=usr/lib/libtols.so.11
-OLD_LIBS+=usr/lib32/libcrypto.so.38
-OLD_LIBS+=usr/lib32/libssl.so.39
-OLD_LIBS+=usr/lib32/libtls.so.11
 .endif
 
 #.if ${MK_LIBTHR} == no
