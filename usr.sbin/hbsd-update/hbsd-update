@@ -39,6 +39,7 @@ kernel=""
 # dnssec variable is yes/no since it's user-visible via
 # hbsd-update.conf(5).
 dnssec="yes"
+dnssec_key="/usr/share/keys/hbsd-update/trusted/dnssec.key"
 
 ignorever=0
 unsigned=0
@@ -65,6 +66,8 @@ SED="/usr/bin/sed"
 TAR="/usr/bin/tar"
 SHA256="/sbin/sha256"
 SHA512="/sbin/sha512"
+TAIL="/usr/bin/tail"
+UNBOUND_HOST="/usr/sbin/unbound-host"
 
 debug_print() {
 	echo -e "${1}" >&2
@@ -119,6 +122,73 @@ get_tmpdir() {
 	return 0
 }
 
+get_last_field() {
+	local data
+	local item
+	local nitems
+	local i
+
+	data="${1}"
+	nitems=0
+	for item in ${data}; do
+		nitems=$((${nitems} + 1))
+	done
+
+	i=0
+	for item in ${data}; do
+		if [ ${i} -eq $((${nitems} - 1)) ]; then
+			echo ${item}
+		fi
+		i=$((${i} + 1))
+	done
+}
+
+dnssec_check() {
+	local res
+	local val
+	local rec
+	local is_secure
+
+	case "${dnssec}" in
+		[yY]*)
+			debug_print "[*] Looking up version info with DNSSEC enabled."
+			val=$(${UNBOUND_HOST} \
+				-v \
+				-t txt \
+				-f ${mountpoint}/${dnssec_key} \
+				${dnsrec})
+
+			if ! echo ${val} | grep -qF 'has TXT record'; then
+				debug_print "[-] Could not get DNS record."
+				return 1
+			fi
+
+			if echo ${val} | grep -qF 'failed'; then
+				debug_print "[-] DNSSEC validation failed."
+				return 2
+			fi
+
+			is_secure=$(get_last_field "${val}")
+			if [ ! "${is_secure}" = "(secure)" ]; then
+				debug_print "[*] DNSSEC validation failed."
+				return 2
+			fi
+
+			echo ${val} | awk '{print $5;}' | sed 's,",,g'
+
+			;;
+		*)
+			${DRILL} ${dnsrec} txt | \
+				${GREP} -F TXT | \
+				${GREP} -vF ';;' | \
+				${AWK} '{print $5;}' | \
+				${SED} 's,",,g'
+			;;
+	esac
+
+	return 0
+}
+
 get_version() {
 	local res
 	local dnssec_str
@@ -131,37 +201,22 @@ get_version() {
 		return 0
 	fi
 
-	if [ ! -z "${dnsrec}" ]; then
-		dnssec_str="-D"
-
-		case "${dnssec}" in
-			[nN]*)
-				dnssec_str=""
-				;;
-			*)
-				debug_print "[*] Performing initial DNSSEC validation."
-				${DRILL} -TD ${dnsrec} txt > /dev/null 2>&1
-				res=${?}
-				if [ ${res} -gt 0 ]; then
-					debug_print "[-] DNSSEC validation failed. Bailing"
-					return 1
-				fi
-
-				;;
-		esac
-
-		# Prefer DNS, fallback to HTTP
-		res=$(${DRILL} ${dnssec_str} ${dnsrec} txt | \
-			${GREP} -F TXT | \
-			${GREP} -vF ';;' | \
-			${AWK} '{print $5;}' | \
-			${SED} 's,",,g')
-		buildver=$(echo ${res} | ${SED} 's,|, ,g' | ${AWK} '{print $2;}')
-		update_hash=$(echo ${res} | ${SED} 's,|, ,g' | ${AWK} '{print $3;}')
+	# Prefer DNS, fallback to HTTP
+	res=$(dnssec_check)
+	if [ ${?} -eq 2 ]; then
+		debug_print "    [-] Bailing."
+		return 1
 	fi
 
+	buildver=$(echo ${res} | ${SED} 's,|, ,g' | ${AWK} '{print $2;}')
+	update_hash=$(echo ${res} | ${SED} 's,|, ,g' | ${AWK} '{print $3;}')
+
 	if [ -z "${buildver}" ]; then
-		# Attempt to grab the version from HTTP
+		# Attempt to grab the version from the mirror.
+		if [ ${verbose} -gt 0 ]; then
+			debug_print "[*] Could not get version info from DNS. Falling back to the mirror."
+		fi
+
 		res=$(${FETCH} -o - ${baseurl}/update-latest.txt)
 		buildver=$(echo ${res} | ${SED} 's,|, ,g' | ${AWK} '{print $2;}')
 		update_hash=$(echo ${res} | ${SED} 's,|, ,g' | ${AWK} '{print $3;}')
@@ -771,7 +826,7 @@ main() {
 	do_report_version=0
 	local_kernel=""
 
-	while getopts 'hioCIUVb:c:j:K:k:t:u:v:' opt; do
+	while getopts 'dhiosCIUVb:c:j:K:k:t:u:v:' opt; do
 		case "${opt}" in
 			b)
 				if ! which -s ${BEADM}; then
