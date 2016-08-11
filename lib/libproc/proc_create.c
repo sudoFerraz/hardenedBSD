@@ -94,23 +94,8 @@ proc_init(pid_t pid, int flags, int status, struct proc_handle **pphdl)
 	procstat_freeprocs(phdl->procstat, kp);
 	if (error != 0)
 		goto out;
-
-<<<<<<< HEAD
-#ifdef	DTRACE_HARDENING_PTRACE
-	phdl->execname[0] = '\0';
-	return (0);
-#endif
-
-	mib[0] = CTL_KERN;
-	mib[1] = KERN_PROC;
-	mib[2] = KERN_PROC_PATHNAME;
-	mib[3] = pid;
-	len = sizeof(phdl->execname);
-	if (sysctl(mib, 4, phdl->execname, &len, NULL, 0) != 0) {
-=======
 	/* Use it to determine the data model for the process. */
 	if ((fd = open(phdl->execpath, O_RDONLY)) < 0) {
->>>>>>> origin/hardened/current/master
 		error = errno;
 		goto out;
 	}
