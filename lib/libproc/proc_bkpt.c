@@ -95,10 +95,6 @@ proc_bkptset(struct proc_handle *phdl, uintptr_t address,
 	unsigned long paddr, caddr;
 	int ret = 0, stopped;
 
-#ifdef	DTRACE_HARDENING_PTRACE
-	return (0);
-#endif
-
 	*saved = 0;
 	if (phdl->status == PS_DEAD || phdl->status == PS_UNDEAD ||
 	    phdl->status == PS_IDLE) {
