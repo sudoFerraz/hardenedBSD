@@ -310,7 +310,9 @@ _man=		man
 .endif
 
 .if ${MK_NETCAT} != "no"
+.  if ${MK_LIBRESSL} == "no"
 SUBDIR+=	nc
+.  endif
 .endif
 
 .if ${MK_NIS} != "no"
