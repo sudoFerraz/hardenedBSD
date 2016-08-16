@@ -7,6 +7,8 @@ SRCS=	netcat.c atomicio.c socks.c
 LDADD+= -ltls -lssl -lcrypto
 DPADD+=  ${LIBTLS} ${LIBSSL} ${LIBCRYPTO}
 
+# Reset man-dir set for LibreSSL
+MANDIR=	${SHAREDIR}/man/man
 MAN1=	nc.1
 
 .PATH:	${LIBRESSL_SRC}/apps/nc
