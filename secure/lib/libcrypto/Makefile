@@ -1,10 +1,11 @@
 # $FreeBSD$
 
+SHLIBDIR?=	/lib
+
 .include <bsd.own.mk>
 
 .if ${MK_LIBRESSL} == "no"
 
-SHLIBDIR?=	/lib
 SUBDIR=		engines
 
 LIB=		crypto
