@@ -123,7 +123,6 @@ MAN=	aac.4 \
 	ddb.4 \
 	de.4 \
 	devctl.4 \
-	digi.4 \
 	disc.4 \
 	divert.4 \
 	${_dpms.4} \
@@ -271,7 +270,6 @@ MAN=	aac.4 \
 	mac_stub.4 \
 	mac_test.4 \
 	malo.4 \
-	mcd.4 \
 	md.4 \
 	mdio.4 \
 	me.4 \
@@ -444,7 +442,6 @@ MAN=	aac.4 \
 	sbp.4 \
 	sbp_targ.4 \
 	scc.4 \
-	scd.4 \
 	sched_4bsd.4 \
 	sched_ule.4 \
 	screen.4 \
@@ -457,7 +454,6 @@ MAN=	aac.4 \
 	sf.4 \
 	${_sfxge.4} \
 	sge.4 \
-	si.4 \
 	siba.4 \
 	siftr.4 \
 	siis.4 \
@@ -501,7 +497,6 @@ MAN=	aac.4 \
 	snd_via82c686.4 \
 	snd_vibes.4 \
 	snp.4 \
-	spic.4 \
 	${_spkr.4} \
 	splash.4 \
 	sppp.4 \

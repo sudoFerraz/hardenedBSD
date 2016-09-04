@@ -240,7 +240,9 @@ SUBDIR.${MK_MAN_UTILS}+=	catman
 SUBDIR.${MK_MAN_UTILS}+=	makewhatis
 .endif
 SUBDIR.${MK_MAN_UTILS}+=	man
+.if ${MK_LIBRESSL} == "no"
 SUBDIR.${MK_NETCAT}+=	nc
+.endif
 SUBDIR.${MK_NIS}+=	ypcat
 SUBDIR.${MK_NIS}+=	ypmatch
 SUBDIR.${MK_NIS}+=	ypwhich
@@ -294,7 +296,7 @@ SUBDIR.${MK_VT}+=	vtfontcvt
 SUBDIR.${MK_USB}+=	usbhidaction
 SUBDIR.${MK_USB}+=	usbhidctl
 SUBDIR.${MK_UTMPX}+=	last
-.if ${MACHINE_CPUARCH} != "riscv" # RISCVTODO users does not build
+.if ${MK_CXX} != "no"
 SUBDIR.${MK_UTMPX}+=	users
 .endif
 SUBDIR.${MK_UTMPX}+=	who
