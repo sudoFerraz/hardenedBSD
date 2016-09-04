@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-/*	$OpenBSD: timingsafe_memcmp.c,v 1.1 2014/06/13 02:12:17 matthew Exp $	*/
-=======
 /*	$OpenBSD: timingsafe_memcmp.c,v 1.2 2015/08/31 02:53:57 guenther Exp $	*/
->>>>>>> origin/hardened/current/master
 /*
  * Copyright (c) 2014 Google Inc.
  *
@@ -19,13 +15,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-<<<<<<< HEAD
-#include <limits.h>
-#include <string.h>
-
-int
-timingsafe_memcmp(const void *b1, const void *b2, size_t len)
-=======
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -36,7 +25,6 @@ int __timingsafe_memcmp(const void *, const void *, size_t);
 
 int
 __timingsafe_memcmp(const void *b1, const void *b2, size_t len)
->>>>>>> origin/hardened/current/master
 {
         const unsigned char *p1 = b1, *p2 = b2;
         size_t i;
@@ -61,8 +49,5 @@ __timingsafe_memcmp(const void *b1, const void *b2, size_t len)
 
         return (res);
 }
-<<<<<<< HEAD
-=======
 
 __weak_reference(__timingsafe_memcmp, timingsafe_memcmp);
->>>>>>> origin/hardened/current/master
